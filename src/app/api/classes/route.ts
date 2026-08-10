@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, getOrCreateDefaultTeacherAndClass } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const teacher = await prisma.teacher.findFirst();
-    if (!teacher) {
-      return NextResponse.json({ success: true, classes: [] });
-    }
+    const { teacher, currentClass } = await getOrCreateDefaultTeacherAndClass();
 
     const classes = await prisma.class.findMany({
       where: { teacherId: teacher.id },
@@ -36,17 +33,20 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { classId, name, gender, dateOfBirth, notes } = body;
 
-    if (!classId || !name) {
+    if (!name || name.trim() === "") {
       return NextResponse.json(
-        { success: false, error: "Vui lòng nhập tên bé và chọn lớp học." },
+        { success: false, error: "Vui lòng nhập tên bé." },
         { status: 400 }
       );
     }
 
+    const { currentClass } = await getOrCreateDefaultTeacherAndClass();
+    const targetClassId = classId || currentClass.id;
+
     const student = await prisma.student.create({
       data: {
-        classId,
-        name,
+        classId: targetClassId,
+        name: name.trim(),
         gender: gender || "Bé",
         dateOfBirth: dateOfBirth || "",
         notes: notes || "",

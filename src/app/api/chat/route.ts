@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, getOrCreateDefaultTeacherAndClass } from "@/lib/prisma";
 import { chatWithCoAi } from "@/lib/ai/aiEngine";
 
 export async function POST(request: Request) {
@@ -15,9 +15,7 @@ export async function POST(request: Request) {
     }
 
     // Get default teacher demo
-    const teacher = await prisma.teacher.findFirst({
-      include: { classes: true },
-    });
+    const { teacher } = await getOrCreateDefaultTeacherAndClass();
 
     let currentConversation = null;
     let history: { role: "user" | "assistant"; content: string }[] = [];
