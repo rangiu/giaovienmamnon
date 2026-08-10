@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -25,9 +26,10 @@ export default function RootLayout({
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 min-h-screen">
           <Navbar />
-          <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto">
+          <main className="flex-1 p-4 md:p-8 pb-20 md:pb-8 max-w-7xl w-full mx-auto">
             {children}
           </main>
+          <MobileBottomNav />
         </div>
       </body>
     </html>

@@ -54,30 +54,33 @@ export function Navbar() {
 
   return (
     <>
-      <header className="h-16 bg-white border-b border-emerald-100/80 px-4 md:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-        {/* Mobile Left Header with Hamburger Button */}
-        <div className="flex items-center gap-3 md:hidden">
+      <header className="h-16 bg-white border-b border-emerald-100 px-4 md:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
+        {/* Mobile Header Left with Hamburger Menu */}
+        <div className="flex items-center gap-2.5 md:hidden">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-colors"
-            aria-label="Mở Menu Mobile"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-emerald-200 active:scale-95 transition-transform"
+            aria-label="Mở Menu"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <span className="text-[11px]">Menu</span>
           </button>
 
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-200">
-              <Sparkles className="w-4 h-4 animate-pulse" />
+          <Link href="/" className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-xs">
+              <Sparkles className="w-4 h-4" />
             </div>
-            <span className="font-extrabold text-base text-emerald-950">Cô AI</span>
+            <span className="font-black text-base text-emerald-950">Cô AI</span>
           </Link>
         </div>
 
+        {/* Desktop Header Middle */}
         <div className="hidden md:flex items-center gap-2 text-sm text-slate-600 bg-emerald-50/60 px-3 py-1.5 rounded-full border border-emerald-100">
           <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
           <span>Đồng hành cùng Giáo viên Mầm non Việt Nam</span>
         </div>
 
+        {/* Header Right Profile */}
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 text-xs bg-amber-50 text-amber-800 px-3 py-1.5 rounded-full border border-amber-200">
             <ShieldCheck className="w-4 h-4 text-amber-600" />
@@ -88,7 +91,7 @@ export function Navbar() {
             href="/settings"
             className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 transition-colors p-1.5 pr-3 rounded-full border border-emerald-200"
           >
-            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-inner">
+            <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-inner">
               Lan
             </div>
             <div className="text-left hidden sm:block">
@@ -103,10 +106,10 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* MOBILE DRAWER NAVIGATION MENU */}
+      {/* MOBILE FULL DRAWER NAVIGATION MENU */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 md:hidden bg-slate-900/50 backdrop-blur-sm flex">
-          <div className="w-4/5 max-w-xs bg-white h-full shadow-2xl flex flex-col justify-between p-4 overflow-y-auto animate-in slide-in-from-left duration-200">
+        <div className="fixed inset-0 z-50 md:hidden bg-slate-900/60 backdrop-blur-sm flex">
+          <div className="w-4/5 max-w-xs bg-white h-full shadow-2xl flex flex-col justify-between p-4 overflow-y-auto">
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
                 <div className="flex items-center gap-2.5">
@@ -126,7 +129,7 @@ export function Navbar() {
                 </button>
               </div>
 
-              <nav className="space-y-1.5">
+              <nav className="space-y-1 text-xs">
                 {navLinks.map((link) => {
                   const Icon = link.icon;
                   const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
@@ -135,14 +138,14 @@ export function Navbar() {
                       key={link.href}
                       href={link.href}
                       className={clsx(
-                        "flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all",
+                        "flex items-center justify-between px-3.5 py-3 rounded-2xl font-bold transition-all",
                         isActive
                           ? "bg-emerald-500 text-white shadow-md shadow-emerald-200"
                           : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className="w-4 h-4" />
+                        <Icon className="w-4.5 h-4.5" />
                         <span>{link.label}</span>
                       </div>
                       {link.badge && (
