@@ -1,0 +1,302 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      String   @default("teacher")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacher   Teacher?
+  aiUsages  AiUsage[]
+}
+
+model Teacher {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schoolName    String?  @default("Trường Mầm Non Họa Mi")
+  className     String?  @default("Lớp Mầm 1")
+  ageGroup      String?  @default("4–5 tuổi")
+  studentCount  Int?     @default(28)
+  currentTopic  String?  @default("Cây – Hoa – Quả – Mùa xuân")
+  teachingStyle String?  @default("Học qua chơi, lấy trẻ làm trung tâm")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  classes       Class[]
+  lessons       Lesson[]
+  conversations Conversation[]
+}
+
+model Class {
+  id          String   @id @default(uuid())
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  name        String
+  ageGroup    String
+  schoolYear  String?  @default("2025-2026")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students    Student[]
+  topics      Topic[]
+}
+
+model Student {
+  id           String   @id @default(uuid())
+  classId      String
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  name         String
+  gender       String?  @default("Bé")
+  dateOfBirth  String?
+  notes        String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  observations Observation[]
+  assessments  StudentAssessment[]
+  reports      AssessmentReport[]
+  topicResults StudentTopicResult[]
+}
+
+model Topic {
+  id           String   @id @default(uuid())
+  classId      String
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  name         String   // e.g. "Cây – Hoa – Quả – Mùa xuân"
+  ageGroup     String   // e.g. "4–5 tuổi"
+  startDate    DateTime
+  endDate      DateTime
+  teacherNotes String?  // Đánh giá chung của giáo viên chủ nhiệm
+  status       String   @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  topicObjectives TopicObjective[]
+  topicResults    StudentTopicResult[]
+  topicReports    TopicReport[]
+}
+
+model AssessmentObjective {
+  id          String   @id @default(uuid())
+  code        String   @unique // "MT3", "MT6", "MT7", "MT12", "MT21", "MT33", "MT45", "MT52", "MT59", "MT66"
+  name        String
+  description String?
+  domainCode  String?  // "LANG", "COG", "PHYS", "SOC_EMO", "AES", "SELF_HELP"
+  ageGroup    String   @default("4–5 tuổi")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  topicObjectives TopicObjective[]
+  results         StudentTopicResult[]
+  linkedObservations ObservationObjectiveLink[]
+}
+
+model TopicObjective {
+  id          String   @id @default(uuid())
+  topicId     String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  objectiveId String
+  objective   AssessmentObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  orderIndex  Int      @default(0)
+
+  @@unique([topicId, objectiveId])
+}
+
+model StudentTopicResult {
+  id          String   @id @default(uuid())
+  topicId     String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  objectiveId String
+  objective   AssessmentObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  
+  rating      String   @default("+") // "+", "-", "o"
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([topicId, studentId, objectiveId])
+}
+
+model ObservationObjectiveLink {
+  id            String   @id @default(uuid())
+  observationId String
+  observation   Observation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  objectiveId   String
+  objective     AssessmentObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([observationId, objectiveId])
+}
+
+model TopicReport {
+  id                     String   @id @default(uuid())
+  topicId                String
+  topic                  Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  classSummary           String   // Tổng quan lớp
+  strengthsSummary       String   // Các mục tiêu nổi bật
+  weakObjectivesSummary  String   // Các mục tiêu cần chú ý
+  studentsNeedingSupport String  // Trẻ cần hỗ trợ
+  recommendedActivities  String   // Gợi ý hoạt động tiếp theo
+  evidenceGaps           String?  // Các khoảng trống minh chứng
+  rawJson                String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model AssessmentRule {
+  id                 String   @id @default(uuid())
+  name               String   @default("Mặc định mầm non")
+  minimumPercentage  Float    @default(80.0) // 80% đạt -> ĐẠT
+  allowPendingState  Boolean  @default(true)
+  createdAt          DateTime @default(now())
+}
+
+model DevelopmentDomain {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  color       String?  @default("emerald")
+  icon        String?  @default("Smile")
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  observations Observation[]
+  assessments  StudentAssessment[]
+}
+
+model AssessmentPeriod {
+  id        String   @id @default(uuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  assessments StudentAssessment[]
+  reports     AssessmentReport[]
+}
+
+model StudentAssessment {
+  id        String   @id @default(uuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  domainId  String
+  domain    DevelopmentDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  periodId  String
+  period    AssessmentPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  
+  level     String   @default("CHUA_DU_MINH_CHUNG")
+  notes     String?
+  createdBy String?  @default("Cô Lan")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, domainId, periodId])
+}
+
+model AssessmentReport {
+  id                  String   @id @default(uuid())
+  studentId           String
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  periodId            String
+  period              AssessmentPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  
+  type                String   @default("MONTHLY")
+  overview            String
+  strengths           String
+  progress            String
+  areasToSupport      String
+  suggestedActivities String
+  evidenceObsIds      String?
+  status              String   @default("DRAFT")
+  confirmedAt         DateTime?
+  createdBy           String   @default("Cô Lan")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Observation {
+  id              String             @id @default(uuid())
+  studentId       String
+  student         Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  domainId        String?
+  domain          DevelopmentDomain? @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  activityContext String?
+  date            DateTime           @default(now())
+  content         String
+  category        String?            @default("Chung")
+  createdBy       String?            @default("Cô Lan")
+  createdAt       DateTime           @default(now())
+
+  objectiveLinks  ObservationObjectiveLink[]
+}
+
+model Lesson {
+  id                String   @id @default(uuid())
+  teacherId         String
+  teacher           Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  title             String
+  ageGroup          String
+  duration          String
+  topic             String?
+  objectives        String
+  preparation       String
+  teacherActivities String
+  childActivities   String
+  openQuestions     String
+  reinforcementGame String
+  conclusion        String?
+  assessment        String?
+  extension         String?
+  rawJson           String?
+  isFavorite        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  teacherId String
+  teacher   Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  title     String    @default("Cuộc trò chuyện mới")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  structuredData String?
+  createdAt      DateTime     @default(now())
+}
+
+model AiUsage {
+  id             String   @id @default(uuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  feature        String
+  model          String
+  inputTokens    Int      @default(0)
+  outputTokens   Int      @default(0)
+  estimatedCost  Float    @default(0)
+  createdAt      DateTime @default(now())
+}
