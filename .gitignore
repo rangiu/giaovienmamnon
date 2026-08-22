@@ -26,3 +26,7 @@ next-env.d.ts
 # SQLite database
 prisma/*.db
 prisma/*.db-journal
+
+# Video AI — file trung gian/video sinh ra lúc dev local (production dùng
+# named volume Docker, không phải thư mục này — xem src/lib/media/storage.ts)
+/.video-storage/

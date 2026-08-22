@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -62,11 +63,14 @@ async function main() {
     },
   });
 
-  // 4. Create Demo Teacher User
+  // 4. Create Demo Teacher User (mật khẩu demo: "demo123456" — chỉ dùng để
+  // test local, đổi ngay nếu triển khai thật)
+  const demoPasswordHash = await bcrypt.hash("demo123456", 10);
   const demoUser = await prisma.user.create({
     data: {
       email: "colan@mamnon.edu.vn",
       name: "Cô Nguyễn Thị Lan",
+      passwordHash: demoPasswordHash,
       role: "teacher",
       teacher: {
         create: {
@@ -82,6 +86,16 @@ async function main() {
     include: { teacher: true },
   });
   const teacherId = demoUser.teacher!.id;
+
+  // Tài khoản demo được kích hoạt sẵn (ACTIVE 1 năm) để tiện test local
+  await prisma.subscription.create({
+    data: {
+      userId: demoUser.id,
+      status: "ACTIVE",
+      currentPeriodStart: new Date(),
+      currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    },
+  });
 
   // 5. Create Class
   const demoClass = await prisma.class.create({

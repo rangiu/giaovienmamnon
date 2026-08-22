@@ -14,62 +14,117 @@ export function SaveLessonBanner({ content, structuredData }: SaveLessonBannerPr
   const [saving, setSaving] = useState(false);
   const [savedLessonId, setSavedLessonId] = useState<string | null>(null);
 
-  // Check if content is a lesson plan
+  // Nhận diện xem đây có THẬT SỰ là 1 giáo án hoàn chỉnh hay không — trước
+  // đây chỉ cần văn bản có chứa chữ "giáo án" ở bất kỳ đâu là hiện banner
+  // lưu kho, nên cả câu chào hỏi bình thường của AI (chỉ nhắc tới "soạn
+  // giáo án" như 1 gợi ý) cũng bị nhận nhầm là giáo án đã soạn xong.
+  //
+  // Bug thật đã gặp (lần 2): các gợi ý nhanh KHÔNG phải giáo án đầy đủ (VD
+  // "🎨 Tạo hoạt động" — chỉ gợi ý 1 hoạt động trải nghiệm, mode "chat") vẫn
+  // có thể vô tình nhắc tới vài từ khoá rời rạc như "chuẩn bị", "củng cố" —
+  // đủ khớp 3/7 từ khoá cũ để bị nhận NHẦM là giáo án đầy đủ. Khi cô bấm lưu,
+  // extractLessonPayload() bên dưới (không có structuredData) dồn HẾT nội
+  // dung vào "Hoạt động của Giáo viên" và để trống hẳn "Hoạt động của Trẻ" —
+  // nhìn như giáo án bị lỗi/thiếu 1 nửa. Sửa: chỉ coi là giáo án đầy đủ khi
+  // có ĐỦ CẢ HAI mục theo đúng 2 đối tượng (giáo viên VÀ trẻ) — dấu hiệu cấu
+  // trúc DUY NHẤT chỉ giáo án thật (theo mẫu III. TIẾN TRÌNH HOẠT ĐỘNG SƯ
+  // PHẠM ở LessonCard.tsx) mới có, còn 1 gợi ý hoạt động đơn lẻ gần như
+  // không bao giờ tự nhiên tách riêng "hoạt động của cô" và "hoạt động của
+  // trẻ" thành 2 mục khác nhau.
+  const upperContent = content.toUpperCase();
+  const hasTeacherActivitySection = /HOẠT ĐỘNG CỦA (GIÁO VIÊN|CÔ)/.test(upperContent);
+  const hasChildActivitySection = /HOẠT ĐỘNG CỦA (TRẺ|BÉ|HỌC SINH)/.test(upperContent);
+
   const isLessonPlan =
     Boolean(structuredData) ||
-    content.toUpperCase().includes("GIÁO ÁN") ||
-    (content.includes("MỤC ĐÍCH") && content.includes("CHUẨN BỊ"));
+    (upperContent.includes("GIÁO ÁN") && content.length > 400 && hasTeacherActivitySection && hasChildActivitySection);
 
   if (!isLessonPlan) return null;
 
-  // Extract lesson details from text or structured data
+  // Trích tiêu đề/lớp/thời lượng thật từ văn bản AI trả lời (best-effort).
+  // KHÔNG bịa nội dung mục tiêu/chuẩn bị/hoạt động — trước đây khi AI không
+  // trả về structuredData, phần này lưu vào Kho Giáo án nguyên một giáo án
+  // MẪU viết cứng (chủ đề "Cây – Hoa – Quả", hoạt động "Hát múa gây hứng
+  // thú"...) HOÀN TOÀN KHÔNG LIÊN QUAN tới nội dung thật AI vừa soạn — cô
+  // bấm lưu tưởng lưu đúng bài vừa đọc nhưng thực ra lưu nhầm bài khác.
+  // Giờ giữ nguyên toàn bộ nội dung thật vào phần "Hoạt động của Giáo viên"
+  // để không mất/không bịa dữ liệu.
+  // Tách best-effort đoạn văn bản NẰM GIỮA 1 mốc "bắt đầu" và mốc "kết thúc"
+  // gần nhất theo sau nó (mốc "kết thúc" khác đã biết, HOẶC 1 tiêu đề mục
+  // đánh số La Mã/số thường tiếp theo — dấu hiệu sang mục mới) — dùng để
+  // tách riêng "Hoạt động của Giáo viên" và "Hoạt động của Trẻ" ra khỏi văn
+  // bản tự do khi CẢ HAI mục đó thật sự có mặt (đã xác nhận ở isLessonPlan).
+  const extractSection = (text: string, startPattern: RegExp, endPatterns: RegExp[]): string | null => {
+    const startMatch = text.match(startPattern);
+    if (!startMatch || startMatch.index === undefined) return null;
+    const from = startMatch.index + startMatch[0].length;
+    let to = text.length;
+    for (const endPattern of endPatterns) {
+      const rest = text.slice(from);
+      const endMatch = rest.match(endPattern);
+      if (endMatch && endMatch.index !== undefined) {
+        to = Math.min(to, from + endMatch.index);
+      }
+    }
+    const section = text.slice(from, to).trim();
+    return section || null;
+  };
+
+  // Từ 1 đoạn văn bản, tách thành mảng gạch đầu dòng nếu có ("- ", "• ", "1.
+  // ") — nếu không có gạch đầu dòng rõ ràng thì giữ nguyên cả đoạn thành 1
+  // phần tử duy nhất (KHÔNG tự chia theo dấu chấm câu — dễ cắt sai giữa ý).
+  const splitToBullets = (text: string): string[] => {
+    const lines = text
+      .split("\n")
+      .map((l) => l.replace(/^[\s]*(?:[-•*]|\d+[\.\)])\s*/, "").trim())
+      .filter(Boolean);
+    return lines.length > 1 ? lines : [text];
+  };
+
+  const nextSectionMarker = /\n\s*(?:(?:[IVX]+|[0-9]+)[\.\)]\s*[A-ZÀ-Ỹ]{3,}|HOẠT ĐỘNG CỦA)/;
+
   const extractLessonPayload = () => {
     if (structuredData) return structuredData;
 
-    // Helper regex extractors
     const extractMatch = (pattern: RegExp, defaultVal: string) => {
       const match = content.match(pattern);
       return match ? match[1].trim() : defaultVal;
     };
 
-    const title = extractMatch(/(?:\*\*|##)?(?:Đề tài|Chủ đề|GIÁO ÁN HOẠT ĐỘNG)[^:\n]*:\s*\*?\*?([^\n\*]+)/i, "Giáo án Hoạt động Mầm non");
-    const ageGroup = extractMatch(/(?:\*\*|##)?Lớp[^:\n]*:\s*\*?\*?([^\n\*]+)/i, "4–5 tuổi");
-    const duration = extractMatch(/(?:\*\*|##)?Thời gian[^:\n]*:\s*\*?\*?([^\n\*]+)/i, "30–35 phút");
+    const title = extractMatch(/(?:\*\*|##)?(?:Đề tài|Chủ đề|GIÁO ÁN HOẠT ĐỘNG)[^:\n]*:\s*\*?\*?([^\n\*]+)/i, "Giáo án từ SUMFLOW Assistant");
+    const ageGroup = extractMatch(/(?:\*\*|##)?Lớp[^:\n]*:\s*\*?\*?([^\n\*]+)/i, "");
+    const duration = extractMatch(/(?:\*\*|##)?Thời gian[^:\n]*:\s*\*?\*?([^\n\*]+)/i, "");
+
+    // isLessonPlan ở trên đã xác nhận văn bản có ĐỦ CẢ 2 mục "Hoạt động của
+    // Giáo viên" và "Hoạt động của Trẻ" — thử tách riêng thật sự thay vì dồn
+    // hết vào 1 bên như trước (khiến bên còn lại trống trơn, nhìn như lỗi).
+    const teacherSection = extractSection(
+      content,
+      /HOẠT ĐỘNG CỦA (?:GIÁO VIÊN|CÔ)[^\n]*:?/i,
+      [/HOẠT ĐỘNG CỦA (?:TRẺ|BÉ|HỌC SINH)/i, nextSectionMarker]
+    );
+    const childSection = extractSection(content, /HOẠT ĐỘNG CỦA (?:TRẺ|BÉ|HỌC SINH)[^\n]*:?/i, [nextSectionMarker]);
+
+    const teacherActivities = teacherSection ? splitToBullets(teacherSection) : [content];
+    // Chỉ tin childSection khi tách được nội dung THẬT (không rỗng) — tránh
+    // để trống lặng lẽ nếu regex khớp mốc nhưng không có gì phía sau.
+    const childActivities = childSection ? splitToBullets(childSection) : [];
 
     return {
       title: title.replace(/\*+/g, "").trim(),
       ageGroup: ageGroup.replace(/\*+/g, "").trim(),
       duration: duration.replace(/\*+/g, "").trim(),
-      topic: "Cây – Hoa – Quả – Mùa xuân",
+      topic: "",
       objectives: JSON.stringify({
-        knowledge: "Trẻ nhận biết và mô tả được các đặc điểm chính của bài học.",
-        skills: "Phát triển kỹ năng quan sát, lắng nghe và trả lời câu hỏi.",
-        attitude: "Trẻ tích cực tham gia hoạt động cùng cô giáo và các bạn.",
+        knowledge: "(Xem đầy đủ nội dung thật ở mục Hoạt động bên dưới — SUMFLOW trả lời dạng văn bản tự do nên các mục khác chưa tách được.)",
       }),
-      preparation: JSON.stringify({
-        teacher: "Tranh ảnh minh họa, vật thật, dụng cụ học tập.",
-        child: "Trang phục gọn gàng, tinh thần thoải mái.",
-      }),
-      teacherActivities: JSON.stringify([
-        "Hát múa gây hứng thú đầu giờ.",
-        "Hướng dẫn trẻ quan sát và thảo luận nội dung chính.",
-        "Tổ chức trò chơi củng cố kiến thức.",
-      ]),
-      childActivities: JSON.stringify([
-        "Lắng nghe cô giảng và tương tác sôi nổi.",
-        "Quan sát học liệu và trả lời câu hỏi gợi mở.",
-        "Tham gia trò chơi cùng các bạn.",
-      ]),
-      openQuestions: JSON.stringify([
-        "Con thấy loại cây này có đặc điểm gì nổi bật?",
-        "Vì sao chúng ta cần chăm sóc và bảo vệ cây xanh?",
-      ]),
-      reinforcementGame: JSON.stringify({
-        name: "Trò chơi củng cố sáng tạo",
-        rules: "Tuân thủ luật chơi nhẹ nhàng.",
-        how_to_play: "Trẻ cùng nhau tham gia trò chơi góc mầm non.",
-      }),
-      conclusion: "Cô nhận xét, tuyên dương cả lớp và chuyển hoạt động.",
+      preparation: JSON.stringify({}),
+      // Giữ NGUYÊN VĂN nội dung AI thật vừa trả lời — không bịa hoạt động khác.
+      teacherActivities: JSON.stringify(teacherActivities),
+      childActivities: JSON.stringify(childActivities),
+      openQuestions: JSON.stringify([]),
+      reinforcementGame: JSON.stringify({}),
+      conclusion: "",
     };
   };
 
@@ -111,7 +166,7 @@ export function SaveLessonBanner({ content, structuredData }: SaveLessonBannerPr
             <h4 className="font-extrabold text-xs md:text-sm">
               {isSaved
                 ? "🎉 Đã lưu Giáo án thành công vào Kho giáo án!"
-                : "💾 Cô AI đã soạn xong Giáo án! Cô có muốn lưu ngay vào Kho giáo án không?"}
+                : "💾 SUMFLOW đã soạn xong Giáo án! Cô có muốn lưu ngay vào Kho giáo án không?"}
             </h4>
             <p className="text-[11px] text-emerald-100">
               {isSaved

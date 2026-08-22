@@ -1,9 +1,56 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateDefaultTeacherAndClass } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/auth";
 import { chatWithCoAi } from "@/lib/ai/aiEngine";
+import type { AiTier } from "@/lib/ai/aiProvider";
+import { getFreeChatLimitPerDay } from "@/lib/settings";
+
+export const dynamic = "force-dynamic";
+
+// Chỉ lưu tối đa 10 cuộc trò chuyện gần nhất/giáo viên — mỗi khi tạo cuộc
+// trò chuyện MỚI thứ 11 trở lên, tự xoá cuộc cũ nhất (ít hoạt động gần đây
+// nhất) để tối ưu dung lượng DB, cô không cần tự dọn tay.
+const MAX_CONVERSATIONS_PER_TEACHER = 10;
+
+async function pruneOldConversations(teacherId: string) {
+  const conversations = await prisma.conversation.findMany({
+    where: { teacherId },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  if (conversations.length > MAX_CONVERSATIONS_PER_TEACHER) {
+    const idsToDelete = conversations.slice(MAX_CONVERSATIONS_PER_TEACHER).map((c) => c.id);
+    await prisma.conversation.deleteMany({ where: { id: { in: idsToDelete } } });
+  }
+}
 
 export async function POST(request: Request) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { teacher, user, access } = ctx;
+
   try {
+    // Tài khoản FREE/EXPIRED (chưa/không còn trả phí) vẫn được dùng Chat cơ
+    // bản, nhưng giới hạn số lượt/NGÀY (chỉnh được ở trang Admin) để khuyến
+    // khích nâng cấp gói. TRIALING/ACTIVE/ADMIN (tier FULL) không giới hạn.
+    if (access.tier !== "FULL") {
+      const dailyLimit = await getFreeChatLimitPerDay();
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const usedToday = await prisma.aiUsage.count({
+        where: { userId: user.id, feature: "chat", createdAt: { gte: oneDayAgo } },
+      });
+      if (usedToday >= dailyLimit) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: "CHAT_LIMIT_REACHED",
+            error: `Cô đã dùng hết ${dailyLimit} lượt chat miễn phí trong ngày hôm nay. Vui lòng thử lại vào ngày mai hoặc nâng cấp gói để chat không giới hạn nhé!`,
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     const body = await request.json();
     const { prompt, conversationId, studentId } = body;
 
@@ -13,9 +60,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // Get default teacher demo
-    const { teacher } = await getOrCreateDefaultTeacherAndClass();
 
     let currentConversation = null;
     let history: { role: "user" | "assistant"; content: string }[] = [];
@@ -48,6 +92,10 @@ export async function POST(request: Request) {
           title: firstLine,
         },
       });
+      // Vừa thêm 1 cuộc trò chuyện mới — dọn bớt cuộc cũ nhất nếu vượt quá
+      // giới hạn 10. Chỉ cần chạy ở đây (lúc TẠO MỚI), vì tiếp tục chat
+      // trong 1 cuộc trò chuyện có sẵn không làm tăng tổng số cuộc.
+      await pruneOldConversations(teacher.id);
     }
 
     // Optional student context if studentId is passed
@@ -73,7 +121,11 @@ export async function POST(request: Request) {
         activeClass: teacher?.classes[0] || null,
         student: studentWithObs,
       },
-      teacher?.userId
+      teacher?.userId,
+      // FREE/hết hạn -> Gemini free; đã trả phí -> DeepSeek (xem aiProvider.ts).
+      // requireActiveUser() đã chặn access.allowed=false (BLOCKED) ở trên
+      // trước khi trả ctx, nên ở đây tier chỉ còn có thể là FULL/LIMITED.
+      access.tier as AiTier
     );
 
     // Save messages in Database
@@ -125,12 +177,11 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  try {
-    const teacher = await prisma.teacher.findFirst();
-    if (!teacher) {
-      return NextResponse.json({ success: true, conversations: [] });
-    }
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { teacher } = ctx;
 
+  try {
     const conversations = await prisma.conversation.findMany({
       where: { teacherId: teacher.id },
       include: {

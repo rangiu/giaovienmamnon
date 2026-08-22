@@ -121,9 +121,18 @@ export function PdfExportButton({ lesson, filename }: PdfExportButtonProps) {
           </div>
         </div>
 
-        <!-- Section 5: Assessment & Extension -->
+        <!-- Section 5: Assessment — tách riêng, có số/tiêu đề rõ ràng như
+             I-IV ở trên (trước đây gộp chung 1 dòng với Kết thúc, dễ bị đọc
+             lướt bỏ sót), đặt Ở CUỐI đúng trật tự giáo án thật. -->
+        ${lesson.assessment ? `
+        <div style="margin-bottom: 16px; background: #faf5ff; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #a855f7;">
+          <h3 style="margin: 0 0 6px 0; color: #7e22ce; font-size: 14px;">V. ĐÁNH GIÁ</h3>
+          <p style="margin: 4px 0;">${lesson.assessment}</p>
+        </div>` : ""}
+
+        <!-- Kết thúc & Mở rộng -->
         <div style="margin-bottom: 24px; font-size: 12px; color: #475569;">
-          <p style="margin: 4px 0;"><b>📌 Kết thúc & Đánh giá:</b> ${lesson.conclusion || ""} ${lesson.assessment || ""}</p>
+          <p style="margin: 4px 0;"><b>📌 Kết thúc:</b> ${lesson.conclusion || ""}</p>
           <p style="margin: 4px 0;"><b>🎨 Mở rộng:</b> ${lesson.extension || ""}</p>
         </div>
 

@@ -1,0 +1,92 @@
+# ============================================================
+# Hạ tầng dự án Cô AI — dùng chung Postgres với "hoadon-db" sẵn có trên
+# VPS (network sumflow_default), KHÔNG chạy Postgres riêng để tiết kiệm
+# RAM. Database "coai" là 1 database riêng biệt bên trong cùng server đó,
+# tách bạch hoàn toàn dữ liệu với web hoá đơn.
+#
+# PROD:
+#   docker compose --profile prod up -d --build
+#   → app chạy nội bộ tại 127.0.0.1:3001 (không lộ ra internet trực
+#     tiếp — expose qua Cloudflare Tunnel, xem README).
+# ============================================================
+services:
+  migrate:
+    profiles: ["prod"]
+    image: coai-migrate:latest
+    build:
+      context: .
+      target: builder
+    container_name: coai-migrate
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Phải đặt DATABASE_URL trong file .env}
+    networks:
+      - sumflow_default
+
+  app:
+    profiles: ["prod"]
+    image: coai-app:latest
+    build:
+      context: .
+      target: runner
+    container_name: coai-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Phải đặt DATABASE_URL trong file .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      # Bể nhiều key Gemini, phân tách bằng dấu phẩy — tự xoay vòng khi 1
+      # key hết hạn mức (xem src/lib/ai/geminiKeyPool.ts). Có thể để trống,
+      # khi đó app tự dùng lại đúng 1 GEMINI_API_KEY ở trên như cũ.
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
+      # Tài khoản đã trả phí dùng DeepSeek (rẻ/nhanh); để trống thì tự rơi
+      # về dùng Gemini như tài khoản free (xem src/lib/ai/aiProvider.ts).
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      APP_URL: ${APP_URL}
+      SEPAY_UNIT_CODE: ${SEPAY_UNIT_CODE}
+      SEPAY_ENV: ${SEPAY_ENV:-production}
+      SEPAY_SECRET_KEY: ${SEPAY_SECRET_KEY}
+      SEPAY_WEBHOOK_API_KEY: ${SEPAY_WEBHOOK_API_KEY}
+      SEPAY_BANK_CODE: ${SEPAY_BANK_CODE}
+      SEPAY_ACCOUNT_NUMBER: ${SEPAY_ACCOUNT_NUMBER}
+      SEPAY_ACCOUNT_HOLDER: ${SEPAY_ACCOUNT_HOLDER}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME}
+      # Video AI sinh ra lúc RUNTIME (không phải public/, bị đóng cứng vào
+      # image lúc build) — lưu ở named volume riêng, sống sót qua các lần
+      # deploy/rebuild container (xem src/lib/media/storage.ts).
+      VIDEO_STORAGE_DIR: /app/storage/videos
+      # Sinh ảnh Tier Hybrid — "pollinations" (miễn phí), "fal" (fal.ai/
+      # Janus-Pro), hoặc "gemini" (key thật hoặc qua proxy bên thứ 3). Xem
+      # src/lib/media/assetEngine.ts.
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-pollinations}
+      FAL_API_KEY: ${FAL_API_KEY:-}
+      GEMINI_PROXY_API_KEY: ${GEMINI_PROXY_API_KEY:-}
+      GEMINI_PROXY_BASE_URL: ${GEMINI_PROXY_BASE_URL:-}
+      TTS_PROVIDER: ${TTS_PROVIDER:-gemini}
+    ports:
+      # Chỉ bind 127.0.0.1 — không lộ trực tiếp ra internet, giống ancom-backend.
+      # Cloudflare Tunnel sẽ trỏ vào localhost:3001 (cấu hình trên dashboard).
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - coai_media:/app/storage/videos
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - sumflow_default
+
+networks:
+  sumflow_default:
+    external: true
+
+# LƯU Ý khi volume coai_media được tạo MỚI lần đầu (VD: deploy trên VPS
+# mới, hoặc lỡ "docker compose down -v"): Docker mặc định tạo thư mục gốc
+# volume với quyền root:root, trong khi container "app" chạy user không
+# đặc quyền "nextjs" (Dockerfile) — job đầu tiên sẽ lỗi thật
+# "EACCES: permission denied, mkdir ... /app/storage/videos/jobs" (đã gặp
+# thật khi triển khai lần đầu). Chạy 1 lần sau khi tạo container:
+#   docker exec --user root coai-app chown -R nextjs:nodejs /app/storage
+volumes:
+  coai_media:

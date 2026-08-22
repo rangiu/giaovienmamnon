@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { X, Save, Plus, BookOpen, Trash2 } from "lucide-react";
+import { AutoGrowTextarea } from "@/components/ui/AutoGrowTextarea";
 
 interface LessonCreateModalProps {
   isOpen: boolean;
@@ -153,9 +154,9 @@ export function LessonCreateModal({
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-medium"
               >
                 <option value="2–3 tuổi">2–3 tuổi (Nhà trẻ)</option>
-                <option value="3–4 tuổi">3–4 tuổi (Mầm)</option>
-                <option value="4–5 tuổi">4–5 tuổi (Chồi)</option>
-                <option value="5–6 tuổi">5–6 tuổi (Lá)</option>
+                <option value="3–4 tuổi">3–4 tuổi (Mẫu giáo bé)</option>
+                <option value="4–5 tuổi">4–5 tuổi (Mẫu giáo nhỡ)</option>
+                <option value="5–6 tuổi">5–6 tuổi (Mẫu giáo lớn)</option>
               </select>
             </div>
           </div>
@@ -227,8 +228,8 @@ export function LessonCreateModal({
             </h4>
             <div>
               <label className="text-[11px] font-bold text-slate-700">Đồ dùng của Cô:</label>
-              <textarea
-                rows={2}
+              <AutoGrowTextarea
+                minRows={2}
                 placeholder="Mô hình, tranh ảnh, nhạc nền..."
                 value={prepTeacher}
                 onChange={(e) => setPrepTeacher(e.target.value)}
@@ -237,8 +238,8 @@ export function LessonCreateModal({
             </div>
             <div>
               <label className="text-[11px] font-bold text-slate-700">Đồ dùng của Trẻ:</label>
-              <textarea
-                rows={2}
+              <AutoGrowTextarea
+                minRows={2}
                 placeholder="Đĩa nhựa, mút xốp, trang phục..."
                 value={prepChild}
                 onChange={(e) => setPrepChild(e.target.value)}
@@ -253,8 +254,8 @@ export function LessonCreateModal({
               <label className="block font-bold text-slate-700 mb-1">
                 Hoạt động của Cô giáo (Mỗi dòng 1 ý)
               </label>
-              <textarea
-                rows={4}
+              <AutoGrowTextarea
+                minRows={4}
                 placeholder="- Ổn định tổ chức: Hát bài hát...&#10;- Hoạt động 1: Cho trẻ xem hộp quà...&#10;- Hoạt động 2: Trải nghiệm quan sát..."
                 value={teacherActsText}
                 onChange={(e) => setTeacherActsText(e.target.value)}
@@ -265,8 +266,8 @@ export function LessonCreateModal({
               <label className="block font-bold text-slate-700 mb-1">
                 Hoạt động của Trẻ em (Mỗi dòng 1 ý)
               </label>
-              <textarea
-                rows={4}
+              <AutoGrowTextarea
+                minRows={4}
                 placeholder="- Trẻ nhún nhảy và hát theo cô...&#10;- Trẻ đoán tên vật trong hộp quà...&#10;- Trẻ truyền tay nhau quan sát..."
                 value={childActsText}
                 onChange={(e) => setChildActsText(e.target.value)}
@@ -281,8 +282,8 @@ export function LessonCreateModal({
               <label className="block font-bold text-slate-700 mb-1">
                 Câu hỏi gợi mở cho trẻ (Mỗi dòng 1 câu)
               </label>
-              <textarea
-                rows={3}
+              <AutoGrowTextarea
+                minRows={3}
                 placeholder="Con thấy vỏ quả cam có màu gì?&#10;Khi sờ vào con thấy thế nào?"
                 value={openQuestionsText}
                 onChange={(e) => setOpenQuestionsText(e.target.value)}
@@ -308,8 +309,8 @@ export function LessonCreateModal({
                 onChange={(e) => setGameRules(e.target.value)}
                 className="w-full px-3 py-1.5 rounded-lg border border-slate-200"
               />
-              <textarea
-                rows={2}
+              <AutoGrowTextarea
+                minRows={2}
                 placeholder="Cách chơi chi tiết"
                 value={gameHowToPlay}
                 onChange={(e) => setGameHowToPlay(e.target.value)}

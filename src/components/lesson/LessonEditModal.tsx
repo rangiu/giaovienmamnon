@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { X, Save, Sparkles, Check } from "lucide-react";
+import { AutoGrowTextarea } from "@/components/ui/AutoGrowTextarea";
 
 interface LessonEditModalProps {
   lesson: any;
@@ -157,9 +158,9 @@ export function LessonEditModal({
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
               >
                 <option value="2–3 tuổi">2–3 tuổi (Nhà trẻ)</option>
-                <option value="3–4 tuổi">3–4 tuổi (Mầm)</option>
-                <option value="4–5 tuổi">4–5 tuổi (Chồi)</option>
-                <option value="5–6 tuổi">5–6 tuổi (Lá)</option>
+                <option value="3–4 tuổi">3–4 tuổi (Mẫu giáo bé)</option>
+                <option value="4–5 tuổi">4–5 tuổi (Mẫu giáo nhỡ)</option>
+                <option value="5–6 tuổi">5–6 tuổi (Mẫu giáo lớn)</option>
               </select>
             </div>
           </div>
@@ -230,8 +231,8 @@ export function LessonEditModal({
             </h4>
             <div>
               <label className="text-[11px] text-slate-600 font-medium">Giáo viên:</label>
-              <textarea
-                rows={2}
+              <AutoGrowTextarea
+                minRows={2}
                 value={prepTeacher}
                 onChange={(e) => setPrepTeacher(e.target.value)}
                 className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs"
@@ -239,8 +240,8 @@ export function LessonEditModal({
             </div>
             <div>
               <label className="text-[11px] text-slate-600 font-medium">Trẻ em:</label>
-              <textarea
-                rows={2}
+              <AutoGrowTextarea
+                minRows={2}
                 value={prepChild}
                 onChange={(e) => setPrepChild(e.target.value)}
                 className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs"
@@ -254,8 +255,8 @@ export function LessonEditModal({
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Hoạt động của Cô (Mỗi dòng 1 hoạt động)
               </label>
-              <textarea
-                rows={4}
+              <AutoGrowTextarea
+                minRows={4}
                 value={teacherActsText}
                 onChange={(e) => setTeacherActsText(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
@@ -265,8 +266,8 @@ export function LessonEditModal({
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Hoạt động của Trẻ (Mỗi dòng 1 hoạt động)
               </label>
-              <textarea
-                rows={4}
+              <AutoGrowTextarea
+                minRows={4}
                 value={childActsText}
                 onChange={(e) => setChildActsText(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
@@ -295,8 +296,8 @@ export function LessonEditModal({
                 className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs"
               />
             </div>
-            <textarea
-              rows={2}
+            <AutoGrowTextarea
+              minRows={2}
               placeholder="Cách chơi"
               value={gameHowToPlay}
               onChange={(e) => setGameHowToPlay(e.target.value)}

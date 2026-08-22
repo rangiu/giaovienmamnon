@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/auth";
 import { synthesizeAssessmentReport } from "@/lib/ai/aiEngine";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { user, teacher } = ctx;
+
   try {
     const body = await request.json();
     const { studentId } = body;
 
     if (!studentId) {
-      return NextResponse.json(
-        { success: false, error: "Vui lòng chọn học sinh" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Vui lòng chọn học sinh" }, { status: 400 });
     }
 
-    const student = await prisma.student.findUnique({
-      where: { id: studentId },
+    // Chỉ tổng hợp báo cáo cho học sinh thuộc lớp giáo viên đang đăng nhập.
+    const student = await prisma.student.findFirst({
+      where: { id: studentId, class: { teacherId: teacher.id } },
       include: {
         observations: { include: { domain: true }, orderBy: { date: "desc" } },
         assessments: { include: { domain: true } },
@@ -23,20 +28,12 @@ export async function POST(request: Request) {
     });
 
     if (!student) {
-      return NextResponse.json(
-        { success: false, error: "Không tìm thấy học sinh" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: "Không tìm thấy học sinh" }, { status: 404 });
     }
 
-    const domains = await prisma.developmentDomain.findMany({
-      orderBy: { orderIndex: "asc" },
-    });
+    const domains = await prisma.developmentDomain.findMany({ orderBy: { orderIndex: "asc" } });
 
-    let currentPeriod = await prisma.assessmentPeriod.findFirst({
-      where: { isCurrent: true },
-    });
-
+    let currentPeriod = await prisma.assessmentPeriod.findFirst({ where: { isCurrent: true } });
     if (!currentPeriod) {
       currentPeriod = await prisma.assessmentPeriod.create({
         data: {
@@ -48,26 +45,19 @@ export async function POST(request: Request) {
       });
     }
 
-    const teacher = await prisma.teacher.findFirst();
-
-    // Call AI Engine synthesize
     const aiResult = await synthesizeAssessmentReport(
       student,
       domains,
       student.observations,
       student.assessments,
       currentPeriod.name,
-      teacher?.userId
+      user.id
     );
 
     if (!aiResult.report) {
-      return NextResponse.json(
-        { success: false, error: aiResult.error || "Không thể tổng hợp báo cáo AI" },
-        { status: 500 }
-      );
+      return NextResponse.json({ success: false, error: aiResult.error || "Không thể tổng hợp báo cáo AI" }, { status: 500 });
     }
 
-    // Save as DRAFT report in Database
     const report = await prisma.assessmentReport.create({
       data: {
         studentId: student.id,
@@ -80,20 +70,13 @@ export async function POST(request: Request) {
         suggestedActivities: aiResult.report.suggestedActivities,
         evidenceObsIds: JSON.stringify(aiResult.report.evidenceObsIds || []),
         status: "DRAFT",
-        createdBy: "Cô Lan",
+        createdBy: user.name,
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      report,
-      missingDomainsSuggestions: aiResult.report.missingDomainsSuggestions,
-    });
+    return NextResponse.json({ success: true, report, missingDomainsSuggestions: aiResult.report.missingDomainsSuggestions });
   } catch (error: any) {
     console.error("Synthesize error:", error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

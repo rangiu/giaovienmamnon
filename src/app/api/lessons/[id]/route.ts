@@ -1,36 +1,38 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/auth";
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { teacher } = ctx;
+  const { id } = await params;
+
   try {
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: params.id },
-    });
-
+    const lesson = await prisma.lesson.findFirst({ where: { id, teacherId: teacher.id } });
     if (!lesson) {
-      return NextResponse.json(
-        { success: false, error: "Không tìm thấy giáo án" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: "Không tìm thấy giáo án" }, { status: 404 });
     }
-
     return NextResponse.json({ success: true, lesson });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { teacher } = ctx;
+  const { id } = await params;
+
   try {
+    const existing = await prisma.lesson.findFirst({ where: { id, teacherId: teacher.id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Không tìm thấy giáo án" }, { status: 404 });
+    }
+
     const body = await request.json();
     const {
       title,
@@ -50,7 +52,7 @@ export async function PUT(
     } = body;
 
     const updated = await prisma.lesson.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         title,
         ageGroup,
@@ -71,26 +73,24 @@ export async function PUT(
 
     return NextResponse.json({ success: true, lesson: updated });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { teacher } = ctx;
+  const { id } = await params;
+
   try {
-    await prisma.lesson.delete({
-      where: { id: params.id },
-    });
+    const existing = await prisma.lesson.findFirst({ where: { id, teacherId: teacher.id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Không tìm thấy giáo án" }, { status: 404 });
+    }
+    await prisma.lesson.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

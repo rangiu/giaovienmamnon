@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/auth";
 import { analyzeTopicAssessmentResults } from "@/lib/ai/aiEngine";
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { user, teacher } = ctx;
+  const { id } = await params;
+
   try {
-    const topic = await prisma.topic.findUnique({
-      where: { id: params.id },
+    // Chỉ phân tích chủ đề thuộc lớp của giáo viên đang đăng nhập.
+    const topic = await prisma.topic.findFirst({
+      where: { id, class: { teacherId: teacher.id } },
       include: {
         class: { include: { students: true } },
         topicObjectives: { include: { objective: true } },
@@ -17,13 +23,8 @@ export async function POST(
     });
 
     if (!topic) {
-      return NextResponse.json(
-        { success: false, error: "Không tìm thấy chủ đề" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: "Không tìm thấy chủ đề" }, { status: 404 });
     }
-
-    const teacher = await prisma.teacher.findFirst();
 
     const formattedResults = topic.topicResults.map((r) => ({
       studentName: r.student.name,
@@ -36,7 +37,7 @@ export async function POST(
       topic.class.students,
       topic.topicObjectives.map((o) => o.objective),
       formattedResults,
-      teacher?.userId
+      user.id
     );
 
     if (result.analysis) {
@@ -54,15 +55,8 @@ export async function POST(
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      analysis: result.analysis,
-      error: result.error,
-    });
+    return NextResponse.json({ success: true, analysis: result.analysis, error: result.error });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

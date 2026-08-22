@@ -9,13 +9,15 @@ export interface ContextOptions {
 
 export function buildTeacherContext(teacher?: Teacher | null): string {
   if (!teacher) return "";
+  // studentCount là số giáo viên tự khai (Cài đặt), có thể là 0 nếu chưa
+  // nhập — dùng ?? thay vì || để không nuốt mất giá trị 0 thật.
+  const studentCount = teacher.studentCount ?? 0;
   return `
 [THÔNG TIN GIÁO VIÊN VÀ LỚP HỌC HẠN ĐỊNH]
-- Giáo viên: Cô Lan
 - Trường: ${teacher.schoolName || "Trường Mầm Non"}
 - Lớp: ${teacher.className || "Mầm 1"}
 - Độ tuổi hiện tại của lớp: ${teacher.ageGroup || "4–5 tuổi"}
-- Sĩ số lớp: ${teacher.studentCount || 28} trẻ
+- Sĩ số lớp: ${studentCount} trẻ
 - Chủ đề đang học: ${teacher.currentTopic || "Chưa xác định"}
 - Phong cách dạy: ${teacher.teachingStyle || "Lấy trẻ làm trung tâm, học qua chơi"}
 `.trim();

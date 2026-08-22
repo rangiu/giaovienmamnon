@@ -39,6 +39,30 @@ html, body {
   box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.08);
 }
 
+/* Ẩn thanh cuộn ngang (VD: thanh tab điều hướng trang giới thiệu) nhưng vẫn
+   cuộn được bằng tay/vuốt trên di động — chỉ là thẩm mỹ, không ảnh hưởng chức năng. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Banner thông báo khẩn chạy ngang đầu trang (AnnouncementBanner) — nội
+   dung lặp lại 2 lần liền kề rồi trượt đúng 50% để tạo vòng lặp liền mạch
+   không giật, không cần đo độ dài văn bản bằng JS. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 22s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
 /* PDF Printable styling helper */
 @media print {
   body {

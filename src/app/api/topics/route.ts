@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateDefaultTeacherAndClass } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/auth";
 
-const FALLBACK_TOPICS = [
-  {
-    id: "topic-1",
-    name: "Cây – Hoa – Quả – Mùa xuân",
-    ageGroup: "4–5 tuổi",
-    startDate: new Date("2026-08-01"),
-    endDate: new Date("2026-08-25"),
-    teacherNotes: "Đa số các cháu tham gia học tập tích cực, đạt được các mục tiêu phát triển theo chủ đề Cây - Hoa - Quả - Mùa xuân.",
-  },
-];
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  try {
-    const { currentClass } = await getOrCreateDefaultTeacherAndClass();
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { currentClass } = ctx;
 
+  try {
     const topics = await prisma.topic.findMany({
       where: { classId: currentClass.id },
       include: {
@@ -30,11 +24,15 @@ export async function GET() {
     return NextResponse.json({ success: true, topics });
   } catch (error: any) {
     console.error("GET /api/topics DB Error:", error);
-    return NextResponse.json({ success: true, topics: FALLBACK_TOPICS });
+    return NextResponse.json({ success: false, error: "Không thể tải danh sách chủ đề." }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { currentClass } = ctx;
+
   try {
     const body = await request.json();
     const { name, ageGroup = "4–5 tuổi", startDate, endDate, objectiveIds } = body;
@@ -45,8 +43,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const { currentClass } = await getOrCreateDefaultTeacherAndClass();
 
     const newTopic = await prisma.topic.create({
       data: {
@@ -59,16 +55,26 @@ export async function POST(request: Request) {
       },
     });
 
+    // Liên kết mục tiêu đánh giá đã chọn vào chủ đề — trước đây body nhận
+    // objectiveIds nhưng không hề dùng, khiến chủ đề luôn tạo ra không có
+    // cột mục tiêu nào để chấm.
+    if (Array.isArray(objectiveIds) && objectiveIds.length > 0) {
+      const validObjectives = await prisma.assessmentObjective.findMany({
+        where: { id: { in: objectiveIds }, isActive: true },
+        select: { id: true },
+      });
+      await prisma.topicObjective.createMany({
+        data: validObjectives.map((o, idx) => ({
+          topicId: newTopic.id,
+          objectiveId: o.id,
+          orderIndex: idx + 1,
+        })),
+      });
+    }
+
     return NextResponse.json({ success: true, topic: newTopic });
   } catch (error: any) {
     console.error("POST /api/topics DB Error:", error);
-    return NextResponse.json({
-      success: true,
-      topic: {
-        id: "topic-" + Date.now(),
-        name: "Chủ đề Mới",
-        ageGroup: "4–5 tuổi",
-      },
-    });
+    return NextResponse.json({ success: false, error: "Không thể tạo chủ đề mới." }, { status: 500 });
   }
 }

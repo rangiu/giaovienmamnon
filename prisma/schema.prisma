@@ -8,15 +8,114 @@ generator client {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  role      String   @default("teacher")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  role          String   @default("teacher")
+  emailVerified Boolean  @default(false)
+  // Admin khoá tài khoản thủ công (VD: vi phạm, gian lận...) — khoá thì
+  // không đăng nhập được nữa và mọi phiên đang mở đều bị huỷ ngay.
+  isLocked      Boolean  @default(false)
+  lockedAt      DateTime?
+  // Token xác minh email (đăng ký xong phải bấm link trong Gmail để kích
+  // hoạt) — chỉ lưu HASH, giống cách lưu session token, token gốc chỉ nằm
+  // trong đường link gửi qua email.
+  verifyTokenHash      String?   @unique
+  verifyTokenExpiresAt DateTime?
+  verifyEmailLastSentAt DateTime?
+  // OTP đặt lại mật khẩu (quên mật khẩu) — mã 6 số gửi qua email, CHỈ lưu
+  // HASH (giống cách lưu session token/mật khẩu, không bao giờ lưu mã gốc ở
+  // server) — hết hạn sau ít phút, xoá ngay sau khi dùng thành công 1 lần.
+  resetOtpHash      String?   @unique
+  resetOtpExpiresAt DateTime?
+  // Mốc thời gian lần cuối cô MỞ trang Diễn đàn phản hồi — dùng để đếm số
+  // bài phản hồi MỚI (của người khác) đăng SAU mốc này, hiện thành số đỏ
+  // cạnh mục "Diễn đàn phản hồi" ở Sidebar. null = chưa từng xem qua (đếm
+  // hết mọi bài của người khác).
+  forumLastSeenAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  teacher   Teacher?
-  aiUsages  AiUsage[]
+  teacher       Teacher?
+  aiUsages      AiUsage[]
+  subscription  Subscription?
+  payments      Payment[]
+  sessions      Session[]
+  feedbacks     Feedback[]
+  notifications Notification[]
+  notificationReads NotificationRead[]
+  feedbackReactions FeedbackReaction[]
+  videoJobs                VideoJob[]
+  videoCreditBalances       VideoCreditBalance[]
+  videoCreditLedgerEntries  VideoCreditLedgerEntry[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Gói thuê bao hàng tháng của từng giáo viên (tài khoản).
+// Mặc định user mới đăng ký có status = PENDING (nghĩa là CHƯA XÁC MINH
+// EMAIL — phải bấm link kích hoạt gửi qua Gmail). Xác minh xong tự động
+// chuyển sang FREE (vào được hệ thống, nhưng chỉ dùng Chat cơ bản có giới
+// hạn lượt/ngày). Trả phí qua SePay -> ACTIVE (full tính năng). Admin vẫn
+// có thể chủ động tặng TRIALING (full tính năng, có hạn) từ trang quản trị.
+model Subscription {
+  id                 String    @id @default(uuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               String    @default("MONTHLY") // MONTHLY (mở rộng thêm YEARLY sau nếu cần)
+  status             String    @default("PENDING") // PENDING, FREE, TRIALING, ACTIVE, EXPIRED, CANCELLED
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  grantedBy          String?   // userId admin đã tặng/kích hoạt (lưu vết ai cấp quyền)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+// Cấu hình hệ thống dạng key-value, chỉnh được từ trang admin (giá gói/tháng...)
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// Mỗi lượt tạo yêu cầu thanh toán (mã giao dịch khớp với nội dung chuyển khoản SePay)
+model Payment {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Int       // VNĐ, số nguyên
+  status        String    @default("PENDING") // PENDING, PAID, EXPIRED, CANCELLED
+  paymentCode   String    @unique // Nội dung chuyển khoản duy nhất, dùng để đối soát webhook SePay
+  provider      String    @default("SEPAY")
+  providerTxnId String?   // Mã giao dịch SePay trả về trong webhook
+  rawWebhook    String?   // Lưu nguyên payload webhook để đối soát/debug khi cần
+  // Gói đã chọn lúc tạo giao dịch (DAILY/WEEKLY/MONTHLY) + số ngày gia hạn
+  // tương ứng — chốt tại thời điểm này để sau này admin đổi giá không làm
+  // sai lệch thời hạn của giao dịch đã tạo trước đó.
+  planCode      String?
+  durationDays  Int?
+  // Loại giao dịch — SUBSCRIPTION (mặc định, tương thích ngược với mọi
+  // Payment cũ) hoặc VIDEO_CREDITS (mua gói lượt tạo video, tách riêng
+  // khỏi thuê bao). Webhook đọc field này để biết gia hạn Subscription hay
+  // cộng VideoCreditBalance. creditsGranted/creditTier chốt tại thời điểm
+  // mua, admin đổi giá/số lượt của gói sau đó không ảnh hưởng giao dịch cũ.
+  purchaseType    String              @default("SUBSCRIPTION") // SUBSCRIPTION, VIDEO_CREDITS
+  creditPackageId String?
+  creditPackage   VideoCreditPackage? @relation(fields: [creditPackageId], references: [id], onDelete: SetNull)
+  creditsGranted  Int?
+  creditTier      String?             // HYBRID, VEO
+  paidAt        DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
 }
 
 model Teacher {
@@ -26,6 +125,9 @@ model Teacher {
   schoolName    String?  @default("Trường Mầm Non Họa Mi")
   className     String?  @default("Lớp Mầm 1")
   ageGroup      String?  @default("4–5 tuổi")
+  // Số điện thoại liên hệ của giáo viên — cô tự điền ở trang Cài đặt, admin
+  // xem được ở trang Quản lý tài khoản để tiện liên hệ hỗ trợ/chăm sóc.
+  phone         String?
   studentCount  Int?     @default(28)
   currentTopic  String?  @default("Cây – Hoa – Quả – Mùa xuân")
   teachingStyle String?  @default("Học qua chơi, lấy trẻ làm trung tâm")
@@ -35,6 +137,7 @@ model Teacher {
   classes       Class[]
   lessons       Lesson[]
   conversations Conversation[]
+  lessonTemplates LessonTemplate[]
 }
 
 model Class {
@@ -58,6 +161,10 @@ model Student {
   name         String
   gender       String?  @default("Bé")
   dateOfBirth  String?
+  address      String?
+  hobbies      String?  // Sở thích của trẻ
+  parentName   String?  // Tên phụ huynh / người giám hộ
+  parentPhone  String?  // SĐT liên hệ phụ huynh
   notes        String?
   avatarUrl    String?
   createdAt    DateTime @default(now())
@@ -201,7 +308,7 @@ model StudentAssessment {
   
   level     String   @default("CHUA_DU_MINH_CHUNG")
   notes     String?
-  createdBy String?  @default("Cô Lan")
+  createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -224,7 +331,7 @@ model AssessmentReport {
   evidenceObsIds      String?
   status              String   @default("DRAFT")
   confirmedAt         DateTime?
-  createdBy           String   @default("Cô Lan")
+  createdBy           String   @default("")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -239,7 +346,7 @@ model Observation {
   date            DateTime           @default(now())
   content         String
   category        String?            @default("Chung")
-  createdBy       String?            @default("Cô Lan")
+  createdBy       String?
   createdAt       DateTime           @default(now())
 
   objectiveLinks  ObservationObjectiveLink[]
@@ -300,3 +407,280 @@ model AiUsage {
   estimatedCost  Float    @default(0)
   createdAt      DateTime @default(now())
 }
+
+// Diễn đàn phản hồi — giáo viên (đã đăng nhập thật) để lại nhận xét/đánh
+// giá về trang web. Nội dung được lọc ngôn từ không chuẩn mực NGAY LÚC GỬI
+// (chặn hẳn, không lưu) — isHidden chỉ dùng làm lưới an toàn thứ 2 để admin
+// tự ẩn thủ công nếu có nội dung lọt qua bộ lọc từ khoá mà vẫn không phù hợp.
+model Feedback {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Lưu lại tên hiển thị tại THỜI ĐIỂM gửi — nếu sau này user đổi tên, các
+  // phản hồi cũ vẫn hiển thị đúng tên lúc đó, không bị đổi ngược theo.
+  authorName String
+  rating     Int?     // 1-5 sao, không bắt buộc
+  content    String
+  isHidden   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  reactions  FeedbackReaction[]
+}
+
+// Biểu cảm kiểu Facebook cho từng bài phản hồi — mỗi người chỉ được chọn
+// ĐÚNG 1 biểu cảm/bài (unique feedbackId+userId), bấm lại đúng biểu cảm đã
+// chọn để bỏ chọn, bấm biểu cảm khác để đổi — xử lý ở API, không phải DB.
+model FeedbackReaction {
+  id         String   @id @default(uuid())
+  feedbackId String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // "like" | "love" | "haha" | "wow" | "sad" | "angry"
+  emoji      String
+  createdAt  DateTime @default(now())
+
+  @@unique([feedbackId, userId])
+}
+
+// Thông báo chuông — userId = null nghĩa là gửi CHO TẤT CẢ (broadcast, admin
+// gửi hàng loạt); userId có giá trị nghĩa là gửi RIÊNG cho đúng 1 tài khoản.
+// Trạng thái "đã đọc" tách sang bảng NotificationRead riêng vì 1 thông báo
+// broadcast được nhiều người dùng chia sẻ chung 1 dòng nhưng mỗi người có
+// trạng thái đọc độc lập.
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  // ADMIN (admin tự soạn gửi) | PAYMENT_SUCCESS | EXPIRING_SOON |
+  // ACCOUNT_LOCKED | ACCOUNT_UNLOCKED | WELCOME | CREDITS_PURCHASED |
+  // VIDEO_READY | VIDEO_FAILED
+  type      String   @default("ADMIN")
+  link      String?
+  // Khoá chống trùng cho các thông báo tự động (VD: "expiring:<userId>:<ngày hết hạn>")
+  // — kiểm tra đã tồn tại trước khi tạo mới, tránh nhắc đi nhắc lại nhiều lần.
+  dedupeKey String?  @unique
+  createdAt DateTime @default(now())
+
+  reads     NotificationRead[]
+}
+
+model NotificationRead {
+  id             String       @id @default(uuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
+}
+
+// ===== AI Video Generation — gói tín dụng video (Hybrid/Veo) =====
+// Bán RIÊNG, KHÔNG gộp vào SUBSCRIPTION_PLANS (settings.ts) vì chi phí AI
+// tạo video vượt xa giá thuê bao hiện tại. Danh sách gói admin thêm/sửa/ẩn
+// được (khác 3 gói thuê bao cố định hardcode trong code).
+model VideoCreditPackage {
+  id         String   @id @default(uuid())
+  name       String   // VD: "10 lượt Hybrid", "5 lượt Veo"
+  tier       String   // HYBRID (ảnh AI + Remotion, rẻ), VEO (video chuyển động thật, đắt)
+  credits    Int      // Số lượt tạo video được cộng khi mua gói này
+  priceVnd   Int
+  isActive   Boolean  @default(true)
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  payments   Payment[]
+}
+
+// Số dư tín dụng HIỆN TẠI của từng giáo viên, tách riêng theo tier (Hybrid
+// và Veo là 2 loại tín dụng độc lập, không dùng lẫn). unique [userId,tier]
+// để trừ tín dụng bằng 1 UPDATE có điều kiện an toàn — xem consumeVideoCredit()
+// trong src/lib/videoCredits.ts — không phải kiểu đếm-rồi-ghi dễ dính race condition.
+model VideoCreditBalance {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier      String   // HYBRID, VEO
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tier])
+}
+
+// Lịch sử MỌI thay đổi số dư (mua, admin tặng, trừ khi tạo video, hoàn khi
+// job lỗi) — dùng để đối soát/debug. Nguồn số dư CHÍNH THỨC vẫn luôn là
+// VideoCreditBalance.balance, cập nhật cùng 1 transaction với dòng ledger.
+model VideoCreditLedgerEntry {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier       String   // HYBRID, VEO
+  delta      Int      // Dương = cộng (mua/tặng/hoàn), âm = trừ (tạo video)
+  reason     String   // PURCHASE, ADMIN_GRANT, JOB_CONSUME, JOB_REFUND
+  paymentId  String?
+  videoJobId String?
+  createdAt  DateTime @default(now())
+}
+
+// 1 lượt yêu cầu tạo video của giáo viên — theo dõi cả pipeline từ kịch bản
+// AI tới file MP4 cuối cùng.
+model VideoJob {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier            String    // HYBRID, VEO
+  rawRequest      String    // Yêu cầu gốc giáo viên gõ
+  // Thời lượng MONG MUỐN giáo viên chọn lúc tạo (giây) — khác với
+  // "durationSeconds" bên dưới (độ dài THẬT của video sau khi render xong).
+  // Dùng để tính số token trừ lúc submit (xem videoCredits.ts) và làm mục
+  // tiêu số cảnh cho AI viết kịch bản (xem videoScriptEngine.ts).
+  requestedDurationSeconds Int?
+  // Số token THẬT đã trừ lúc submit — trước đây LUÔN trừ đúng 1 "lượt" cố
+  // định bất kể video ngắn/dài; giờ trừ theo thời lượng yêu cầu (mỗi cảnh +
+  // mỗi nhân vật tham chiếu = 1 token, xem estimateTokenCost()). Lưu lại số
+  // THẬT đã trừ để hoàn ĐÚNG số đó nếu job lỗi (không hoàn nhầm cố định 1).
+  tokensConsumed  Int?
+  // JSON mảng scenes: [{sceneIndex, narration, durationSeconds,
+  // backgroundAssetKey, characterAssetKey, visualPrompt}]
+  storyboardJson  String?
+  status          String    @default("PENDING") // PENDING, SCRIPTING, GENERATING_ASSETS, RENDERING, COMPLETED, FAILED
+  errorMessage    String?
+  // Đường dẫn TƯƠNG ĐỐI trong volume lưu trữ (KHÔNG phải public/, vì
+  // public/ được đóng gói cứng vào image Docker lúc build) — phát qua route
+  // có xác thực src/app/api/media/videos/[jobId]/route.ts.
+  finalVideoPath  String?
+  durationSeconds Int?
+  // Kết quả kiểm tra chất lượng TỰ ĐỘNG sau khi render (LLM nhìn khung hình
+  // đại diện từng cảnh, đối chiếu với lời kể — xem videoQualityCheck.ts).
+  // v1: CHỈ ghi log/gắn cờ để theo dõi, KHÔNG chặn/tự render lại — bug thật
+  // đã gặp làm động lực xây tính năng này: video "Thỏ và Rùa" render xong
+  // "thành công" nhưng nội dung sai be bét (1 nhân vật chung chung đại diện
+  // cả 2 con) mà hệ thống không hề biết để cảnh báo.
+  qaReportJson    String?
+  // Đã trừ tín dụng thành công chưa — job lỗi TRƯỚC khi trừ thì không cần
+  // hoàn lại khi FAILED (tránh hoàn nhầm 2 lần).
+  creditConsumed  Boolean   @default(false)
+  // TRUE nếu ít nhất 1 cảnh bị tự động rút gọn lời kể vì thời lượng đã chọn
+  // quá ngắn so với nội dung yêu cầu (lưới an toàn cuối — xem
+  // trimNarrationToWordBudget() ở hybridPipeline.ts) — hiển thị cho giáo
+  // viên biết video có thể đã lược bớt vài chi tiết so với yêu cầu gốc,
+  // KHÔNG âm thầm sửa mà không báo.
+  contentWasTrimmed Boolean @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime?
+
+  assets          VideoJobAsset[]
+  scenes          VideoJobScene[]
+}
+
+// Bộ tài sản TÁI SỬ DỤNG của 1 video (nhân vật/nền) — AI sinh 1 LẦN cho cả
+// video, dùng lại xuyên suốt mọi cảnh thay vì vẽ lại từng cảnh riêng lẻ.
+// Tier Hybrid: ảnh tĩnh ghép vào Remotion. Tier Veo: dùng làm referenceImages
+// truyền vào MỌI lần gọi Veo để giữ nhân vật đồng nhất giữa các cảnh.
+model VideoJobAsset {
+  id         String   @id @default(uuid())
+  videoJobId String
+  videoJob   VideoJob @relation(fields: [videoJobId], references: [id], onDelete: Cascade)
+  key        String   // "character_main", "bg_forest" — scenes tham chiếu bằng key này
+  kind       String   // CHARACTER, BACKGROUND, PROP
+  imagePath  String
+  createdAt  DateTime @default(now())
+
+  @@unique([videoJobId, key])
+}
+
+// Từng cảnh trong storyboard — theo dõi asset trung gian riêng để debug
+// pipeline nhiều bước (ảnh/clip + audio riêng + trạng thái từng cảnh).
+//
+// v2 — KIẾN TRÚC "1 ẢNH/CẢNH" thay cho ghép lớp (nền+nhân vật+vật phụ tách
+// rời): sau nhiều vòng vá lỗi ghép lớp (xoá nền, sprite sheet, né chồng
+// lấn...) vẫn liên tục phát sinh lỗi thật mới (khung trắng đè nhân vật ở
+// nhiều dạng khác nhau) — bỏ hẳn cách ghép lớp bằng code, để AI vẽ TRỌN VẸN
+// 1 ảnh cho mỗi cảnh (nhân vật+bối cảnh+vật thể trong 1 lần gọi, giống 1
+// trang sách tranh thật), giữ đồng nhất nhân vật bằng cách gửi kèm ẢNH THAM
+// CHIẾU nhân vật (xem VideoJobAsset) làm điều kiện hoá — đã xác minh THẬT
+// kỹ thuật này hoạt động tốt qua đúng proxy đang dùng trước khi xây.
+// backgroundAssetKey/charactersJson/propsJson (kiến trúc ghép lớp cũ) đã bỏ.
+model VideoJobScene {
+  id              String   @id @default(uuid())
+  videoJobId      String
+  videoJob        VideoJob @relation(fields: [videoJobId], references: [id], onDelete: Cascade)
+  sceneIndex      Int
+  narration       String
+  durationSeconds Int
+  // Đường dẫn TƯƠNG ĐỐI tới ảnh DUY NHẤT của cảnh (Tier Hybrid) — AI vẽ
+  // trọn vẹn cả cảnh, không còn ghép lớp nền/nhân vật/vật phụ riêng.
+  imagePath       String?
+  visualPrompt    String?  // Tier Veo: prompt tiếng Anh gửi cho cảnh này
+  clipPath        String?  // Tier Veo: clip mp4 4-8s Veo trả về
+  audioPath       String?  // TTS narration riêng cảnh này (dùng chung cả 2 tier)
+  status          String   @default("PENDING") // PENDING, GENERATING, DONE, FAILED
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([videoJobId, sceneIndex])
+}
+
+// Khoá đơn (singleton, luôn chỉ 1 dòng id="singleton") đảm bảo CHỈ 1 video
+// được render cùng lúc trên toàn hệ thống — VPS RAM thấp/CPU-only không
+// kham nổi 2 pipeline (Remotion/ffmpeg) chạy song song. Claim bằng 1 UPDATE
+// có điều kiện (atomic ở tầng Postgres), KHÔNG đếm-rồi-ghi (tránh race
+// condition). claimedAt cho phép tự "giải cứu" nếu tiến trình cũ crash giữa
+// chừng (coi là hết hạn sau một ngưỡng, VD 20 phút).
+// Bài viết blog — đăng ở trang giới thiệu, soạn/quản lý riêng ở phía admin
+// (không liên quan Feedback/diễn đàn). Nội dung viết Markdown, tái dùng hạ
+// tầng hiển thị react-markdown đã có sẵn cho Chat (xem BlogMarkdown.tsx).
+// KHÔNG gắn quan hệ tới User — authorName là text tự do admin nhập (giống
+// Feedback.authorName), vì đây là nội dung do đội ngũ SUMFLOW đăng, không
+// phải nội dung do từng tài khoản giáo viên tạo ra.
+model BlogPost {
+  id            String    @id @default(uuid())
+  slug          String    @unique
+  title         String
+  excerpt       String?
+  content       String // Markdown
+  coverImageUrl String?
+  authorName    String    @default("Đội ngũ SUMFLOW")
+  status        String    @default("DRAFT") // DRAFT, PUBLISHED
+  viewCount     Int       @default(0)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+}
+
+model VideoProcessingSlot {
+  id           String    @id @default("singleton")
+  busy         Boolean   @default(false)
+  claimedJobId String?
+  claimedAt    DateTime?
+}
+
+// Mẫu giáo án tùy chỉnh / mẫu chuẩn mầm non
+model LessonTemplate {
+  id               String   @id @default(uuid())
+  teacherId        String?  // null nếu là Mẫu System
+  teacher          Teacher? @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  fileFormat       String   @default("docx") // docx, doc, pdf, txt, md
+  originalFileName String?
+  structureJson    String   // Cấu trúc JSON tiêu đề / các mục / bảng biểu
+  sampleText       String?  // Text thô trích xuất từ file gốc
+  status           String   @default("PRIVATE") // PRIVATE | PENDING_REVIEW | APPROVED | REJECTED
+  aiReviewScore    Float?   // Điểm AI đánh giá 0 - 100
+  aiReviewNotes    String?  // Nhận xét của AI về chất lượng file mẫu
+  rejectionReason  String?  // Lý do từ chối nếu Admin reject
+  isSystem         Boolean  @default(false) // true nếu là mẫu chuẩn 5E, Truyền Thống, STEAM
+  useCount         Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+

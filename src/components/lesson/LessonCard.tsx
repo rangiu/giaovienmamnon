@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   Sparkles,
+  Lightbulb,
 } from "lucide-react";
 import { PdfExportButton } from "../ui/PdfExportButton";
 import { LessonEditModal } from "./LessonEditModal";
@@ -100,7 +101,7 @@ ${Array.isArray(childActs) ? childActs.map((a: string) => `- ${a}`).join("\n") :
 
 5. TRÒ CHƠI CỦNG CỐ: ${game.name}
 Cách chơi: ${game.how_to_play}
-`.trim();
+${currentLesson.assessment ? `\n6. ĐÁNH GIÁ:\n${currentLesson.assessment}\n` : ""}`.trim();
 
     navigator.clipboard.writeText(textToCopy);
     setCopied(true);
@@ -186,17 +187,17 @@ Cách chơi: ${game.how_to_play}
             <h4>I. MỤC TIÊU BÀI HỌC</h4>
           </div>
           <div className="space-y-1 text-xs text-slate-700 leading-relaxed pl-6">
-            <p>
+            <p className="whitespace-pre-wrap">
               <strong className="text-emerald-950">1. Kiến thức:</strong>{" "}
               {typeof objs === "object" ? objs.knowledge : objs}
             </p>
             {typeof objs === "object" && objs.skills && (
-              <p>
+              <p className="whitespace-pre-wrap">
                 <strong className="text-emerald-950">2. Kỹ năng:</strong> {objs.skills}
               </p>
             )}
             {typeof objs === "object" && objs.attitude && (
-              <p>
+              <p className="whitespace-pre-wrap">
                 <strong className="text-emerald-950">3. Thái độ:</strong> {objs.attitude}
               </p>
             )}
@@ -210,12 +211,12 @@ Cách chơi: ${game.how_to_play}
             <h4>II. CHUẨN BỊ ĐẠO CỤ</h4>
           </div>
           <div className="space-y-1 text-xs text-slate-700 pl-6">
-            <p>
+            <p className="whitespace-pre-wrap">
               <strong className="text-amber-950">• Giáo viên:</strong>{" "}
               {typeof preps === "object" ? preps.teacher : preps}
             </p>
             {typeof preps === "object" && preps.child && (
-              <p>
+              <p className="whitespace-pre-wrap">
                 <strong className="text-amber-950">• Trẻ em:</strong> {preps.child}
               </p>
             )}
@@ -236,17 +237,19 @@ Cách chơi: ${game.how_to_play}
                 👩‍🏫 Hoạt động của Giáo viên
               </h5>
               <ul className="space-y-2 text-xs text-slate-700">
-                {Array.isArray(teacherActs) ? (
+                {Array.isArray(teacherActs) && teacherActs.length > 0 ? (
                   teacherActs.map((act: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
-                      <span>{act}</span>
+                      <span className="whitespace-pre-wrap">{act}</span>
                     </li>
                   ))
+                ) : Array.isArray(teacherActs) ? (
+                  <li className="italic text-slate-400">Chưa có nội dung — cô bấm "Sửa" ở trên để bổ sung nhé.</li>
                 ) : (
-                  <p>{teacherActs}</p>
+                  <p className="whitespace-pre-wrap">{teacherActs}</p>
                 )}
               </ul>
             </div>
@@ -257,25 +260,37 @@ Cách chơi: ${game.how_to_play}
                 👶 Hoạt động của Trẻ em
               </h5>
               <ul className="space-y-2 text-xs text-slate-700">
-                {Array.isArray(childActs) ? (
+                {Array.isArray(childActs) && childActs.length > 0 ? (
                   childActs.map((act: string, idx: number) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="w-4 h-4 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
-                      <span>{act}</span>
+                      <span className="whitespace-pre-wrap">{act}</span>
                     </li>
                   ))
+                ) : Array.isArray(childActs) ? (
+                  <li className="italic text-slate-400">Chưa có nội dung — cô bấm "Sửa" ở trên để bổ sung nhé.</li>
                 ) : (
-                  <p>{childActs}</p>
+                  <p className="whitespace-pre-wrap">{childActs}</p>
                 )}
               </ul>
             </div>
           </div>
         </div>
 
-        {/* Section IV: Open Questions & Game */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Section IV: Open Questions & Game — trước đây có nội dung nhưng
+            KHÔNG có tiêu đề "IV." bao ngoài như I/II/III/V, đánh số nhảy cóc
+            III -> V nhìn như thiếu hẳn 1 mục dù nội dung vẫn đủ. Thêm tiêu
+            đề nhóm cho khớp mạch đánh số, chỉ hiện khi có ít nhất 1 trong 2
+            khối con (giống cách "V. ĐÁNH GIÁ" chỉ hiện khi có nội dung). */}
+        {(openQs || (game && game.name)) && (
+        <div className="space-y-3">
+          <h4 className="font-extrabold text-rose-950 text-sm flex items-center gap-2">
+            <Lightbulb className="w-4 h-4 text-rose-600" />
+            IV. CÂU HỎI GỢI MỞ & TRÒ CHƠI CỦNG CỐ
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Open Questions */}
           {openQs && (
             <div className="bg-sky-50/60 p-4 rounded-2xl border border-sky-100 space-y-2">
@@ -284,10 +299,12 @@ Cách chơi: ${game.how_to_play}
                 <h5>CÂU HỎI GỢI MỞ DÀNH CHO TRẺ</h5>
               </div>
               <ul className="list-disc list-inside space-y-1 text-xs text-slate-700">
-                {Array.isArray(openQs) ? (
-                  openQs.map((q: string, idx: number) => <li key={idx}>{q}</li>)
+                {Array.isArray(openQs) && openQs.length > 0 ? (
+                  openQs.map((q: string, idx: number) => <li key={idx} className="whitespace-pre-wrap">{q}</li>)
+                ) : Array.isArray(openQs) ? (
+                  <li className="italic text-slate-400 list-none">Chưa có câu hỏi gợi mở — cô bấm "Sửa" ở trên để bổ sung nhé.</li>
                 ) : (
-                  <li>{openQs}</li>
+                  <li className="whitespace-pre-wrap">{openQs}</li>
                 )}
               </ul>
             </div>
@@ -302,35 +319,49 @@ Cách chơi: ${game.how_to_play}
               </div>
               <div className="text-xs text-slate-700 space-y-1">
                 {game.rules && (
-                  <p>
+                  <p className="whitespace-pre-wrap">
                     <strong>Luật chơi:</strong> {game.rules}
                   </p>
                 )}
                 {game.how_to_play && (
-                  <p>
+                  <p className="whitespace-pre-wrap">
                     <strong>Cách chơi:</strong> {game.how_to_play}
                   </p>
                 )}
               </div>
             </div>
           )}
+          </div>
         </div>
+        )}
+
+        {/* Section V: Assessment — trước đây gộp chung vào khối "Footer info"
+            phía dưới không có số/tiêu đề riêng, dễ bị bỏ sót khi cô đọc
+            lướt giáo án — tách thành 1 mục rõ ràng như I-IV ở trên, đặt Ở
+            CUỐI đúng trật tự giáo án thật (đánh giá luôn ở cuối, sau khi đã
+            tổ chức xong hoạt động). */}
+        {currentLesson.assessment && (
+          <div className="bg-gradient-to-r from-violet-50/80 to-fuchsia-50/40 p-4 rounded-2xl border border-violet-100/70 space-y-2">
+            <div className="flex items-center gap-2 text-violet-900 font-extrabold text-sm">
+              <UserCheck className="w-4 h-4 text-violet-600" />
+              <h4>V. ĐÁNH GIÁ</h4>
+            </div>
+            <p className="text-xs text-slate-700 leading-relaxed pl-6 whitespace-pre-wrap">
+              {currentLesson.assessment}
+            </p>
+          </div>
+        )}
 
         {/* Footer info & Extensions */}
-        {(currentLesson.conclusion || currentLesson.assessment || currentLesson.extension) && (
+        {(currentLesson.conclusion || currentLesson.extension) && (
           <div className="bg-slate-50 p-4 rounded-2xl text-xs space-y-1 text-slate-600 border border-slate-200/60">
             {currentLesson.conclusion && (
-              <p>
+              <p className="whitespace-pre-wrap">
                 <strong className="text-slate-800">Kết thúc:</strong> {currentLesson.conclusion}
               </p>
             )}
-            {currentLesson.assessment && (
-              <p>
-                <strong className="text-slate-800">Đánh giá:</strong> {currentLesson.assessment}
-              </p>
-            )}
             {currentLesson.extension && (
-              <p>
+              <p className="whitespace-pre-wrap">
                 <strong className="text-slate-800">Hoạt động mở rộng:</strong> {currentLesson.extension}
               </p>
             )}

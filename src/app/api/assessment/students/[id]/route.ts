@@ -1,75 +1,38 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/auth";
 
-const FALLBACK_DOMAINS = [
-  { domainId: "d-1", code: "LANG", name: "Ngôn ngữ", color: "sky", icon: "MessageSquare", level: "DAT", observationCount: 2 },
-  { domainId: "d-2", code: "COG", name: "Nhận thức & Khám phá", color: "emerald", icon: "Brain", level: "TOT", observationCount: 3 },
-  { domainId: "d-3", code: "PHYS", name: "Thể chất & Vận động", color: "amber", icon: "Activity", level: "DAT", observationCount: 2 },
-  { domainId: "d-4", code: "SOC_EMO", name: "Tình cảm & Kỹ năng xã hội", color: "rose", icon: "Heart", level: "DANG_PHAT_TRIEN", observationCount: 1 },
-  { domainId: "d-5", code: "AES", name: "Thẩm mỹ", color: "purple", icon: "Palette", level: "DAT", observationCount: 2 },
-  { domainId: "d-6", code: "SELF_HELP", name: "Kỹ năng tự phục vụ", color: "teal", icon: "Sparkles", level: "DAT", observationCount: 2 },
-];
+export const dynamic = "force-dynamic";
 
-const FALLBACK_STUDENT_PROFILE = {
-  success: true,
-  student: {
-    id: "st-1",
-    name: "Học sinh Mầm 1",
-    gender: "Bé",
-    dateOfBirth: "15/05/2021",
-    notes: "Ngoan ngoãn, hăng hái tham gia hoạt động.",
-    className: "Lớp Mầm 1",
-    ageGroup: "4–5 tuổi",
-  },
-  currentPeriodName: "Tháng 8/2026",
-  domainProfile: FALLBACK_DOMAINS,
-  observations: [],
-  reports: [],
-  missingDomainSuggestions: [],
-};
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await requireActiveUser();
+  if (ctx instanceof NextResponse) return ctx;
+  const { teacher } = ctx;
+  const { id } = await params;
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
   try {
-    const student = await prisma.student.findUnique({
-      where: { id: params.id },
+    // Chỉ trả về đúng học sinh thuộc lớp giáo viên đang đăng nhập.
+    const student = await prisma.student.findFirst({
+      where: { id, class: { teacherId: teacher.id } },
       include: {
         class: true,
-        observations: {
-          include: { domain: true },
-          orderBy: { date: "desc" },
-        },
-        assessments: {
-          include: { domain: true, period: true },
-        },
-        reports: {
-          include: { period: true },
-          orderBy: { createdAt: "desc" },
-        },
+        observations: { include: { domain: true }, orderBy: { date: "desc" } },
+        assessments: { include: { domain: true, period: true } },
+        reports: { include: { period: true }, orderBy: { createdAt: "desc" } },
       },
     });
 
     if (!student) {
-      return NextResponse.json(FALLBACK_STUDENT_PROFILE);
+      return NextResponse.json({ success: false, error: "Không tìm thấy học sinh." }, { status: 404 });
     }
 
-    const domains = await prisma.developmentDomain.findMany({
-      orderBy: { orderIndex: "asc" },
-    });
-
-    const currentPeriod = await prisma.assessmentPeriod.findFirst({
-      where: { isCurrent: true },
-    });
+    const domains = await prisma.developmentDomain.findMany({ orderBy: { orderIndex: "asc" } });
+    const currentPeriod = await prisma.assessmentPeriod.findFirst({ where: { isCurrent: true } });
 
     const missingDomainSuggestions: { domainId: string; domainName: string; count: number; suggestions: string[] }[] = [];
 
     const domainProfile = domains.map((domain) => {
-      const currentObs = student.observations.filter(
-        (o) => o.domainId === domain.id || o.category === domain.name
-      );
-
+      const currentObs = student.observations.filter((o) => o.domainId === domain.id || o.category === domain.name);
       const assessment = student.assessments.find(
         (a) => a.domainId === domain.id && (currentPeriod ? a.periodId === currentPeriod.id : true)
       );
@@ -121,7 +84,7 @@ export async function GET(
         className: student.class.name,
         ageGroup: student.class.ageGroup,
       },
-      currentPeriodName: currentPeriod?.name || "Tháng 8/2026",
+      currentPeriodName: currentPeriod?.name || "Chưa có kỳ đánh giá",
       domainProfile,
       observations: student.observations,
       reports: student.reports,
@@ -129,6 +92,6 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("GET /api/assessment/students/[id] DB Error:", error);
-    return NextResponse.json(FALLBACK_STUDENT_PROFILE);
+    return NextResponse.json({ success: false, error: "Không thể tải hồ sơ học sinh." }, { status: 500 });
   }
 }
