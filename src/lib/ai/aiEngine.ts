@@ -436,8 +436,28 @@ export async function generateLessonPlanStep(
     return { text: "", error: "MISSING_API_KEY" };
   }
 
+  let parsedTpl: any = null;
+  if (customTemplateStructure) {
+    try {
+      parsedTpl = typeof customTemplateStructure === "string" ? JSON.parse(customTemplateStructure) : customTemplateStructure;
+    } catch (e) {}
+  }
+
   let stepInstruction = "";
-  if (step === 1) {
+
+  if (parsedTpl && parsedTpl.sections && Array.isArray(parsedTpl.sections) && parsedTpl.sections.length > 0) {
+    // DYNAMIC TEMPLATE PARTITIONING:
+    // Tự động bóc tách danh sách tiêu đề mục từ file Mẫu người dùng Import, chia làm 2 Nửa để chạy 2 bước siêu tốc!
+    const totalSecs = parsedTpl.sections.length;
+    const midPoint = Math.ceil(totalSecs / 2);
+    const targetSections = step === 1 ? parsedTpl.sections.slice(0, midPoint) : parsedTpl.sections.slice(midPoint);
+
+    const headingsText = targetSections
+      .map((s: any, idx: number) => `${idx + 1}. **${s.heading}**${s.description ? `: ${s.description}` : ""}`)
+      .join("\n");
+
+    stepInstruction = `BẮT BUỘC TRẢ VỀ VĂN BẢN VÀ BẢNG KẺ Ô SOẠN ĐÚNG NGUYÊN VĂN THEO CÁC MỤC TIÊU ĐỀ SAU TỪ FILE MẪU CỦA NGƯỜI DÙNG (${step === 1 ? "NỬA ĐẦU MẪU" : "NỬA SAU MẪU"}):\n\n${headingsText}\n\nYêu cầu: Điền nội dung chi tiết, chất lượng cao cho từng mục trên theo đúng cấu trúc file mẫu của người dùng.`;
+  } else if (step === 1) {
     stepInstruction = `BẮT BUỘC trả về duy nhất các phần cấu trúc sau (ĐÚNG 100% THEO FILE MẪU CHUẨN MẦM NON):
 
 # KẾ HOẠCH TUẦN: ${prompt.toUpperCase()}
