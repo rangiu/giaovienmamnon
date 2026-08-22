@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Download, FileText, FileType, File as FileIcon } from "lucide-react";
-import { exportAsTxt, exportAsDoc, exportAsPdf } from "@/lib/exportDocument";
+import { exportAsTxt, exportAsDoc, exportAsDocx, exportAsPdf } from "@/lib/exportDocument";
 
 interface ExportMenuProps {
   title: string;
@@ -59,13 +59,13 @@ export function ExportMenu({ title, content, className = "" }: ExportMenuProps) 
           </button>
           <button
             onClick={() => {
-              exportAsDoc(title, content);
+              exportAsDocx(title, content);
               setOpen(false);
             }}
             className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-left text-slate-700 font-semibold"
           >
             <FileType className="w-3.5 h-3.5 text-sky-600" />
-            Word (.doc)
+            Microsoft Word (.docx)
           </button>
           <button
             onClick={handlePdf}

@@ -18,7 +18,7 @@ import {
 interface TemplateQuickFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLessonGenerated: (lesson: any) => void;
+  onLessonGenerated: (lesson: any, rawText?: string) => void;
 }
 
 export function TemplateQuickFormModal({
@@ -34,10 +34,10 @@ export function TemplateQuickFormModal({
   // Form Soạn bài nhanh
   const [prompt, setPrompt] = useState("");
   const [ageGroup, setAgeGroup] = useState("4–5 tuổi");
-  const [duration, setDuration] = useState("30 phút");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [previewTemplate, setPreviewTemplate] = useState<any | null>(null);
 
   // Form Upload mẫu
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -93,7 +93,6 @@ export function TemplateQuickFormModal({
         body: JSON.stringify({
           prompt: prompt.trim(),
           ageGroup,
-          duration,
           templateId: selectedTemplateId || undefined,
         }),
       });
@@ -118,7 +117,7 @@ export function TemplateQuickFormModal({
         body: JSON.stringify({
           title: generatedLesson.title,
           ageGroup: generatedLesson.ageGroup || ageGroup,
-          duration: generatedLesson.duration || duration,
+          duration: generatedLesson.duration || "30 phút",
           topic: generatedLesson.topic || prompt,
           objectives: JSON.stringify(generatedLesson.objectives),
           preparation: JSON.stringify(generatedLesson.preparation),
@@ -135,10 +134,10 @@ export function TemplateQuickFormModal({
 
       const saveData = await saveRes.json();
       if (saveData.success) {
-        onLessonGenerated(saveData.lesson);
+        onLessonGenerated(saveData.lesson, data.rawText);
         onClose();
       } else {
-        onLessonGenerated(generatedLesson);
+        onLessonGenerated(generatedLesson, data.rawText);
         onClose();
       }
     } catch (err: any) {
@@ -264,35 +263,19 @@ export function TemplateQuickFormModal({
                 />
               </div>
 
-              {/* Lứa tuổi & Thời lượng */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-slate-800">Lứa tuổi</label>
-                  <select
-                    value={ageGroup}
-                    onChange={(e) => setAgeGroup(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium bg-white"
-                  >
-                    <option value="2–3 tuổi">2–3 tuổi (Nhà trẻ)</option>
-                    <option value="3–4 tuổi">3–4 tuổi (Mẫu giáo bé)</option>
-                    <option value="4–5 tuổi">4–5 tuổi (Mẫu giáo nhỡ)</option>
-                    <option value="5–6 tuổi">5–6 tuổi (Mẫu giáo lớn)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-slate-800">Thời lượng</label>
-                  <select
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium bg-white"
-                  >
-                    <option value="20–25 phút">20–25 phút</option>
-                    <option value="25–30 phút">25–30 phút</option>
-                    <option value="30 phút">30 phút (Chuẩn)</option>
-                    <option value="35–40 phút">35–40 phút</option>
-                  </select>
-                </div>
+              {/* Lứa tuổi */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-800">Lứa tuổi học sinh</label>
+                <select
+                  value={ageGroup}
+                  onChange={(e) => setAgeGroup(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium bg-white"
+                >
+                  <option value="2–3 tuổi">2–3 tuổi (Nhà trẻ)</option>
+                  <option value="3–4 tuổi">3–4 tuổi (Mẫu giáo bé)</option>
+                  <option value="4–5 tuổi">4–5 tuổi (Mẫu giáo nhỡ)</option>
+                  <option value="5–6 tuổi">5–6 tuổi (Mẫu giáo lớn)</option>
+                </select>
               </div>
 
               {/* Chọn Mẫu Giáo Án */}
@@ -317,9 +300,14 @@ export function TemplateQuickFormModal({
                     <span className="text-[11px] text-slate-500 mt-1 block">Đang tải danh sách mẫu...</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-2.5 max-h-48 overflow-y-auto p-1">
+                  <div className="grid grid-cols-1 gap-2.5 max-h-56 overflow-y-auto p-1">
                     {templates.map((tpl) => {
                       const isSelected = selectedTemplateId === tpl.id;
+                      let structure: any = null;
+                      try {
+                        structure = typeof tpl.structureJson === "string" ? JSON.parse(tpl.structureJson) : tpl.structure;
+                      } catch (e) {}
+
                       return (
                         <div
                           key={tpl.id}
@@ -330,8 +318,8 @@ export function TemplateQuickFormModal({
                               : "bg-white border-slate-200 hover:border-emerald-300 hover:bg-slate-50"
                           }`}
                         >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-xs text-slate-900">{tpl.title}</span>
                               {tpl.isSystem && (
                                 <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
@@ -345,8 +333,38 @@ export function TemplateQuickFormModal({
                               )}
                             </div>
                             <p className="text-[11px] text-slate-500 line-clamp-1">{tpl.description}</p>
+
+                            {/* Section Headings Badges */}
+                            {structure && structure.sections && (
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {structure.sections.slice(0, 4).map((sec: any, idx: number) => (
+                                  <span key={idx} className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">
+                                    {sec.heading}
+                                  </span>
+                                ))}
+                                {structure.sections.length > 4 && (
+                                  <span className="text-[9px] text-slate-400 font-bold">
+                                    +{structure.sections.length - 4} mục
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewTemplate(tpl);
+                              }}
+                              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 text-[11px] font-bold transition-colors border border-slate-200"
+                              title="Xem trước cấu trúc tiêu đề của mẫu"
+                            >
+                              👁️ Xem trước mẫu
+                            </button>
+                            {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
+                          </div>
                         </div>
                       );
                     })}
@@ -455,11 +473,6 @@ export function TemplateQuickFormModal({
                       : "bg-rose-50 border-rose-200 text-rose-700"
                   }`}
                 >
-                  {uploadMessage.type === "success" ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  )}
                   <span>{uploadMessage.text}</span>
                 </div>
               )}
@@ -486,6 +499,85 @@ export function TemplateQuickFormModal({
           )}
         </div>
       </div>
+
+      {/* Preview Template Modal */}
+      {previewTemplate && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-emerald-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-slate-900 p-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-sm">Xem Trước Cấu Trúc Mẫu Giáo Án</h3>
+              </div>
+              <button
+                onClick={() => setPreviewTemplate(null)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 text-xs text-slate-700">
+              <div className="space-y-1 border-b border-slate-100 pb-3">
+                <span className="font-black text-sm text-slate-900 block">{previewTemplate.title}</span>
+                <p className="text-slate-500">{previewTemplate.description}</p>
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full uppercase">
+                    {previewTemplate.fileFormat || "docx"}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Đã sử dụng: {previewTemplate.useCount || 0} lần
+                  </span>
+                </div>
+              </div>
+
+              {/* Sections list */}
+              {(() => {
+                let structure: any = null;
+                try {
+                  structure = typeof previewTemplate.structureJson === "string" ? JSON.parse(previewTemplate.structureJson) : previewTemplate.structure;
+                } catch (e) {}
+
+                if (!structure || !structure.sections || structure.sections.length === 0) {
+                  return <p className="text-slate-400 italic">Mẫu này không có thông tin các mục tiêu đề chi tiết.</p>;
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <span className="font-bold text-slate-900 block">📋 Các mục bài học trong mẫu ({structure.sections.length} mục):</span>
+                    <div className="space-y-2">
+                      {structure.sections.map((sec: any, idx: number) => (
+                        <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                          <span className="font-extrabold text-emerald-800 block text-xs">{sec.heading}</span>
+                          {sec.description && <p className="text-[11px] text-slate-500 whitespace-pre-wrap">{sec.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setPreviewTemplate(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition-colors"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedTemplateId(previewTemplate.id);
+                  setPreviewTemplate(null);
+                }}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-colors shadow-xs"
+              >
+                ✓ Chọn Mẫu Này
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

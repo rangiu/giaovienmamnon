@@ -1,7 +1,19 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  HeadingLevel,
+  AlignmentType,
+} from "docx";
 
-/** Tải 1 chuỗi nội dung xuống máy dưới dạng file, dùng chung cho cả 3 định dạng. */
+/** Tải 1 chuỗi nội dung xuống máy dưới dạng file. */
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -29,43 +41,201 @@ export function exportAsTxt(title: string, content: string) {
 }
 
 /**
- * Xuất .doc mở được thật trong Microsoft Word / LibreOffice / Google Docs —
- * dùng kỹ thuật HTML-as-Word chuẩn (khai báo mso-application/word), KHÔNG
- * phải file OOXML .docx nhị phân thật, nhưng Word nhận diện và mở đúng nội
- * dung, giữ định dạng cơ bản (không phải file giả/rỗng).
+ * Xuất file .docx nhị phân thật mở bằng Microsoft Word chuẩn 100%,
+ * tự động dựng Bảng (Tables) kẻ ô, Cột và Định dạng từ văn bản Markdown.
  */
+export async function exportAsDocx(title: string, content: string) {
+  const lines = content.split("\n");
+  const children: any[] = [];
+
+  // Tiêu đề chính của tài liệu
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: title,
+          bold: true,
+          size: 32, // 16pt
+          font: "Times New Roman",
+          color: "047857",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 300 },
+    })
+  );
+
+  let currentTableRows: string[][] = [];
+
+  const flushTable = () => {
+    if (currentTableRows.length === 0) return;
+    // Lọc bỏ dòng kẻ vạch ngăn cách dạng |---|---|
+    const validRows = currentTableRows.filter(
+      (row) => !row.every((cell) => /^[\s\-:|]+$/.test(cell))
+    );
+
+    if (validRows.length > 0) {
+      const tableRows = validRows.map((rowCells, rowIndex) => {
+        const isHeader = rowIndex === 0;
+        return new TableRow({
+          children: rowCells.map(
+            (cellText) =>
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: cellText.trim(),
+                        bold: isHeader,
+                        size: isHeader ? 22 : 20, // 11pt hoặc 10pt
+                        font: "Times New Roman",
+                        color: isHeader ? "065F46" : "1E293B",
+                      }),
+                    ],
+                  }),
+                ],
+                shading: isHeader ? { fill: "ECFDF5" } : undefined, // Nền xanh ngọc nhẹ cho tiêu đề bảng
+                width: { size: Math.floor(100 / Math.max(rowCells.length, 1)), type: WidthType.PERCENTAGE },
+                margins: { top: 100, bottom: 100, left: 150, right: 150 },
+              })
+          ),
+        });
+      });
+
+      children.push(
+        new Table({
+          rows: tableRows,
+          width: { size: 100, type: WidthType.PERCENTAGE },
+        })
+      );
+      children.push(new Paragraph({ text: "", spacing: { after: 150 } }));
+    }
+    currentTableRows = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Phát hiện dòng Bảng Markdown dạng | Cột 1 | Cột 2 |
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      const cells = trimmed
+        .slice(1, -1)
+        .split("|")
+        .map((c) => c.trim());
+      currentTableRows.push(cells);
+      continue;
+    } else {
+      flushTable();
+    }
+
+    if (!trimmed) {
+      children.push(new Paragraph({ text: "", spacing: { after: 100 } }));
+      continue;
+    }
+
+    // Tiêu đề các cấp (#, ##, ###)
+    if (trimmed.startsWith("# ")) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: trimmed.replace(/^#\s+/, ""),
+              bold: true,
+              size: 28, // 14pt
+              font: "Times New Roman",
+              color: "047857",
+            }),
+          ],
+          spacing: { before: 240, after: 120 },
+        })
+      );
+    } else if (trimmed.startsWith("## ")) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: trimmed.replace(/^##\s+/, ""),
+              bold: true,
+              size: 26, // 13pt
+              font: "Times New Roman",
+              color: "065F46",
+            }),
+          ],
+          spacing: { before: 200, after: 100 },
+        })
+      );
+    } else if (trimmed.startsWith("### ")) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: trimmed.replace(/^###\s+/, ""),
+              bold: true,
+              size: 24, // 12pt
+              font: "Times New Roman",
+              color: "0F766E",
+            }),
+          ],
+          spacing: { before: 160, after: 80 },
+        })
+      );
+    } else {
+      // Đoạn văn có xử lý chữ in đậm **text**
+      const runs: TextRun[] = [];
+      const parts = trimmed.split(/(\*\*.*?\*\*)/g);
+
+      for (const part of parts) {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          runs.push(
+            new TextRun({
+              text: part.slice(2, -2),
+              bold: true,
+              font: "Times New Roman",
+              size: 24, // 12pt
+            })
+          );
+        } else if (part) {
+          runs.push(
+            new TextRun({
+              text: part,
+              font: "Times New Roman",
+              size: 24, // 12pt
+            })
+          );
+        }
+      }
+
+      children.push(
+        new Paragraph({
+          children: runs,
+          spacing: { after: 100 },
+        })
+      );
+    }
+  }
+
+  flushTable();
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children,
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  downloadBlob(blob, `${safeFileName(title)}.docx`);
+}
+
+/** Tương thích ngược cho các nút gọi exportAsDoc cũ -> dùng thẳng exportAsDocx */
 export function exportAsDoc(title: string, content: string) {
-  const escapedContent = content
-    .split("\n")
-    .map((line) => `<p style="margin:0 0 8px 0;">${line.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "&nbsp;"}</p>`)
-    .join("");
-
-  const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-  <meta charset="utf-8">
-  <title>${title}</title>
-  <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
-  <style>
-    body { font-family: "Times New Roman", serif; font-size: 13pt; line-height: 1.5; }
-    h1 { font-size: 16pt; }
-  </style>
-</head>
-<body>
-  <h1>${title}</h1>
-  ${escapedContent}
-</body>
-</html>`;
-
-  const blob = new Blob(["﻿", html], { type: "application/msword;charset=utf-8" });
-  downloadBlob(blob, `${safeFileName(title)}.doc`);
+  exportAsDocx(title, content);
 }
 
 /**
- * Xuất PDF bằng cách render HTML thật ra ảnh rồi nhúng vào jsPDF (giống
- * đúng kỹ thuật đã dùng ở trang Sổ đánh giá sau chủ đề) — KHÔNG dùng
- * doc.text() trực tiếp của jsPDF vì font mặc định (Helvetica) không có đủ
- * dấu tiếng Việt, sẽ in ra chữ bị mất dấu/lỗi font.
+ * Xuất PDF bằng cách render HTML thật ra ảnh rồi nhúng vào jsPDF
  */
 export async function exportAsPdf(title: string, content: string) {
   const container = document.createElement("div");

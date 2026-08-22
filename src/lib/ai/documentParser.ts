@@ -36,8 +36,13 @@ export async function parseDocumentToText(
     let rawText = "";
 
     if (ext === "docx") {
-      const result = await mammoth.extractRawText({ buffer });
-      rawText = result.value;
+      const htmlResult = await mammoth.convertToHtml({ buffer });
+      const rawResult = await mammoth.extractRawText({ buffer });
+      // Giữ lại cấu trúc Bảng HTML (<table>...) nếu có bảng trong file Word mẫu,
+      // giúp AI hiểu được cấu trúc Bảng phân công 7 góc & Bảng kế hoạch 5 ngày.
+      rawText = htmlResult.value && htmlResult.value.includes("<table")
+        ? htmlResult.value
+        : rawResult.value;
     } else if (ext === "pdf") {
       const data = await pdfParse(buffer);
       rawText = data.text;

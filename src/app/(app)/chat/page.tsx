@@ -828,13 +828,20 @@ function ChatContent() {
       <TemplateQuickFormModal
         isOpen={isTemplateModalOpen}
         onClose={() => setIsTemplateModalOpen(false)}
-        onLessonGenerated={(newLesson) => {
+        onLessonGenerated={(newLesson, rawText) => {
+          const markdownContent = rawText || `# GIÁO ÁN: ${newLesson.title}\n\n**Độ tuổi:** ${newLesson.ageGroup || "4-5 tuổi"} | **Thời lượng:** ${newLesson.duration || "30 phút"}\n\n` +
+            `## I. MỤC TIÊU BÀI HỌC\n- **Kiến thức:** ${typeof newLesson.objectives === "object" ? newLesson.objectives.knowledge : newLesson.objectives}\n` +
+            `- **Kỹ năng:** ${typeof newLesson.objectives === "object" ? newLesson.objectives.skills : ""}\n` +
+            `- **Thái độ:** ${typeof newLesson.objectives === "object" ? newLesson.objectives.attitude : ""}\n\n` +
+            `## II. CHUẨN BỊ\n- **Cô:** ${typeof newLesson.preparation === "object" ? newLesson.preparation.teacher : newLesson.preparation}\n` +
+            `- **Trẻ:** ${typeof newLesson.preparation === "object" ? newLesson.preparation.child : ""}\n\n` +
+            `## III. HOẠT ĐỘNG DẠY HỌC\n${Array.isArray(newLesson.teacherActivities) ? newLesson.teacherActivities.map((a: string) => `- ${a}`).join("\n") : newLesson.teacherActivities}`;
+
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `✅ SUMFLOW đã soạn xong giáo án "${newLesson.title}" theo mẫu cô chọn! Cô xem chi tiết bên dưới nhé!`,
-              structuredData: newLesson,
+              content: markdownContent,
             },
           ]);
         }}
