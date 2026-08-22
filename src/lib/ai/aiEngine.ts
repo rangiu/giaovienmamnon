@@ -352,6 +352,12 @@ Mỗi ngày trình bày rõ: Đón trẻ & Trò chuyện sáng, Thể dục sán
   const generatedChunks: string[] = [];
   let carryOverContext = "";
 
+  let customSectionInstruction = "";
+  if (parsedTpl && parsedTpl.sections && parsedTpl.sections.length > 0) {
+    const headingsList = parsedTpl.sections.map((s: any) => `- ${s.heading} (${s.description || ""})`).join("\n");
+    customSectionInstruction = `\nBẮT BUỘC SOẠN ĐÚNG 100% THEO TIÊU ĐỀ CÁC MỤC TRONG MẪU CỦA NGƯỜI DÙNG:\n${headingsList}\n`;
+  }
+
   for (let i = 0; i < steps.length; i++) {
     const currentStep = steps[i];
     console.log(`[Pipeline] Step ${i + 1}/4: ${currentStep.stepName}...`);
@@ -359,6 +365,7 @@ Mỗi ngày trình bày rõ: Đón trẻ & Trò chuyện sáng, Thể dục sán
     const stepPrompt = `
 YÊU CẦU SOẠN BÀI: "${prompt}".
 Lứa tuổi: ${ageGroup}.
+${customSectionInstruction}
 
 ${carryOverContext ? `HỒ SƠ BỐI CẢNH CỐ ĐỊNH TỪ CÁC BƯỚC TRƯỚC (BẮT BUỘC KẾ THỪA 100% ĐỒNG NHẤT):
 ${carryOverContext}\n` : ""}
@@ -366,6 +373,7 @@ ${carryOverContext}\n` : ""}
 ${currentStep.instruction}
 
 QUY TẮC BẮT BUỘC:
+- BẮT BUỘC sử dụng đúng các tiêu đề mục từ mẫu của người dùng nếu có ở trên.
 - KHÔNG chào hỏi, KHÔNG giới thiệu rườm rà (KHÔNG viết "Chào cô...", KHÔNG viết "Dưới đây là...").
 - Trình bày Bảng biểu đúng định dạng Bảng Markdown chuẩn (| Cột 1 | Cột 2 | Cột 3 | Cột 4 |).
 `;
