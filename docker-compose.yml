@@ -17,7 +17,7 @@ services:
       context: .
       target: builder
     container_name: coai-migrate
-    command: npx prisma migrate deploy
+    command: npx prisma db push --accept-data-loss
     environment:
       DATABASE_URL: ${DATABASE_URL:?Phải đặt DATABASE_URL trong file .env}
     networks:
