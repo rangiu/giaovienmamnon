@@ -79,14 +79,16 @@ export async function exportAsDocx(title: string, content: string) {
         const isHeader = rowIndex === 0;
         return new TableRow({
           children: rowCells.map(
-            (cellText) =>
-              new TableCell({
+            (cellText) => {
+              const isBoldCell = isHeader || cellText.includes("**");
+              const cleanCellText = cellText.replace(/\*\*/g, "").replace(/<br\s*\/?>/gi, "\n").trim();
+              return new TableCell({
                 children: [
                   new Paragraph({
                     children: [
                       new TextRun({
-                        text: cellText.trim(),
-                        bold: isHeader,
+                        text: cleanCellText,
+                        bold: isBoldCell,
                         size: isHeader ? 22 : 20, // 11pt hoặc 10pt
                         font: "Times New Roman",
                         color: isHeader ? "065F46" : "1E293B",
@@ -97,7 +99,8 @@ export async function exportAsDocx(title: string, content: string) {
                 shading: isHeader ? { fill: "ECFDF5" } : undefined, // Nền xanh ngọc nhẹ cho tiêu đề bảng
                 width: { size: Math.floor(100 / Math.max(rowCells.length, 1)), type: WidthType.PERCENTAGE },
                 margins: { top: 100, bottom: 100, left: 150, right: 150 },
-              })
+              });
+            }
           ),
         });
       });
