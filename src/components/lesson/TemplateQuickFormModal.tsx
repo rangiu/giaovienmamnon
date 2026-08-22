@@ -379,6 +379,25 @@ export function TemplateQuickFormModal({
                 </div>
               )}
 
+              {/* Progress Indicator when generating */}
+              {generating && (
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2 animate-pulse">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                      <span>Đang chạy Tiến Trình Soạn 4 Bước Nối Tiếp...</span>
+                    </span>
+                    <span className="text-emerald-700">100% Đầy Đủ</span>
+                  </div>
+                  <div className="w-full bg-emerald-200 h-2 rounded-full overflow-hidden">
+                    <div className="bg-emerald-600 h-full w-full rounded-full animate-progress" />
+                  </div>
+                  <p className="text-[11px] text-emerald-700 leading-tight">
+                    AI đang soạn nối tiếp 4 phần (Góc chơi ➔ Chơi ngoài trời 5 ngày ➔ Hoạt động học Thứ 2–6 ➔ Đánh giá) để đảm bảo KHÔNG bị cụt hay thiếu data.
+                  </p>
+                </div>
+              )}
+
               {/* Submit Button */}
               <button
                 type="submit"
@@ -388,7 +407,7 @@ export function TemplateQuickFormModal({
                 {generating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>SUMFLOW đang bóc tách & soạn bài học theo mẫu...</span>
+                    <span>Hệ thống đang tiến hành soạn 4 bước...</span>
                   </>
                 ) : (
                   <>

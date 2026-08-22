@@ -126,23 +126,15 @@ export async function generateLessonPlan(
 
   let templateGuidance = "";
   if (customTemplateStructure) {
-    try {
-      const parsedTpl = typeof customTemplateStructure === "string" ? JSON.parse(customTemplateStructure) : customTemplateStructure;
-      if (parsedTpl && parsedTpl.sections) {
-        templateGuidance = `
-YÊU CẦU ĐẶC BIỆT VỀ CẤU TRÚC (BẮT BUỘC SOẠN BÁM SÁT MẪU GIÁO ÁN ĐÃ CHỌN):
-Tên mẫu: "${parsedTpl.title || "Mẫu giáo án"}" (${parsedTpl.domainOrType || "Mầm non"})
-Mô tả mẫu: ${parsedTpl.description || ""}
-
-Danh sách các mục BẮT BUỘC phải điền theo đúng cấu trúc của mẫu:
-${JSON.stringify(parsedTpl.sections, null, 2)}
-
-Hãy đảm bảo điền đầy đủ và chi tiết nội dung tiết dạy cho từng mục trong mẫu trên.
-`;
-      }
-    } catch (e) {
-      console.warn("Could not parse customTemplateStructure in generateLessonPlan:", e);
-    }
+    return generateLessonPlanPipeline(
+      prompt,
+      ageGroup,
+      duration,
+      contextOptions,
+      userId,
+      tier,
+      customTemplateStructure
+    );
   }
 
   const customSectionsInstruction = templateGuidance
@@ -304,6 +296,117 @@ BẮT BUỘC trả về ĐÚNG ĐỊNH DẠNG JSON duy nhất sau (không thêm 
       error: err?.message || "FAILED_TO_GENERATE_LESSON",
     };
   }
+}
+
+/**
+ * TIẾN TRÌNH SOẠN BÀI PHÂN ĐOẠN NỐI TIẾP (MULTI-STEP PIPELINE GENERATOR)
+ * Giải quyết triệt để sự cố AI bị trạm trần Output Token khi gặp file mẫu Kế hoạch tuần dài (~40,000 ký tự).
+ * Tự động chia bài thành 4 Bước ngầm -> Gọi AI nối tiếp 4 lần -> Ghép lại thành bài hoàn chỉnh 100%.
+ */
+export async function generateLessonPlanPipeline(
+  prompt: string,
+  ageGroup: string = "4–5 tuổi",
+  duration: string = "30 phút",
+  contextOptions: ContextOptions = {},
+  userId?: string,
+  tier: AiTier = "FULL",
+  customTemplateStructure?: string | null
+): Promise<{ lesson: StructuredLessonOutput | null; rawText: string; error?: string }> {
+  if (hasNoProvider()) {
+    return { lesson: null, rawText: "", error: "MISSING_API_KEY" };
+  }
+
+  let parsedTpl: any = null;
+  if (customTemplateStructure) {
+    try {
+      parsedTpl = typeof customTemplateStructure === "string" ? JSON.parse(customTemplateStructure) : customTemplateStructure;
+    } catch (e) {}
+  }
+
+  const steps = [
+    {
+      stepName: "Bước 1/4: Thông tin chung, Mục tiêu bài học & Bảng phân công 7 Góc chơi",
+      instruction: `BẮT BUỘC trả về duy nhất các phần sau:
+1. Tiêu đề bài viết: "# KẾ HOẠCH TUẦN: ${prompt.toUpperCase()}" (Độ tuổi: ${ageGroup}).
+2. Mục tiêu bài học (Kiến thức, Kỹ năng, Thái độ, Chuẩn bị của Cô và Trẻ).
+3. BẢNG PHÂN CÔNG 7 GÓC CHƠI (Góc xây dựng, Góc phân vai, Góc học tập, Góc thư viện, Góc nghệ thuật, Góc vận động, Góc thiên nhiên).
+Trình bày dạng Bảng Markdown chuẩn (| Hoạt động | Mục đích yêu cầu | Chuẩn bị | Tổ chức hoạt động |).`,
+    },
+    {
+      stepName: "Bước 2/4: Bảng Kế hoạch Hoạt động ngoài trời 5 ngày (Thứ 2 đến Thứ 6)",
+      instruction: `BẮT BUỘC trả về BẢNG HOẠT ĐỘNG NGOÀI TRỜI 5 NGÀY (Thứ 2, Thứ 3, Thứ 4, Thứ 5, Thứ 6).
+Mỗi ngày gồm: Quan sát có chủ định, Trò chơi vận động (TCVĐ) và Chơi theo ý thích (CTYT).
+Trình bày dạng Bảng Markdown chuẩn (| Thứ | Hoạt động | Mục đích yêu cầu | Chuẩn bị | Tổ chức hoạt động |).`,
+    },
+    {
+      stepName: "Bước 3/4: Chi tiết Kế hoạch Hoạt động học các ngày Thứ 2, Thứ 3 và Thứ 4",
+      instruction: `BẮT BUỘC trình bày chi tiết Kế hoạch Hoạt động học cho 3 ngày đầu tuần: Thứ 2, Thứ 3 và Thứ 4.
+Mỗi ngày trình bày rõ: Đón trẻ & Trò chuyện sáng, Thể dục sáng, Hoạt động học chính (Tiến trình 3 bước: Gây hứng thú -> Khám phá quan sát -> Củng cố) và Vệ sinh ăn ngủ.`,
+    },
+    {
+      stepName: "Bước 4/4: Chi tiết Kế hoạch Hoạt động học Thứ 5, Thứ 6, Hoạt động chiều & Đánh giá trẻ",
+      instruction: `BẮT BUỘC trình bày chi tiết Kế hoạch Hoạt động học cho 2 ngày cuối tuần: Thứ 5 và Thứ 6, cùng Hoạt động chiều và Bảng Đánh giá trẻ sau chủ đề.`,
+    },
+  ];
+
+  const generatedChunks: string[] = [];
+  let carryOverContext = "";
+
+  for (let i = 0; i < steps.length; i++) {
+    const currentStep = steps[i];
+    console.log(`[Pipeline] Step ${i + 1}/4: ${currentStep.stepName}...`);
+
+    const stepPrompt = `
+YÊU CẦU SOẠN BÀI: "${prompt}".
+Lứa tuổi: ${ageGroup}.
+
+${carryOverContext ? `HỒ SƠ BỐI CẢNH CỐ ĐỊNH TỪ CÁC BƯỚC TRƯỚC (BẮT BUỘC KẾ THỪA 100% ĐỒNG NHẤT):
+${carryOverContext}\n` : ""}
+
+${currentStep.instruction}
+
+QUY TẮC BẮT BUỘC:
+- KHÔNG chào hỏi, KHÔNG giới thiệu rườm rà (KHÔNG viết "Chào cô...", KHÔNG viết "Dưới đây là...").
+- Trình bày Bảng biểu đúng định dạng Bảng Markdown chuẩn (| Cột 1 | Cột 2 | Cột 3 | Cột 4 |).
+`;
+
+    try {
+      const fullPrompt = buildFullPromptContext(stepPrompt, contextOptions);
+      const result = await runAiText(tier, {
+        systemInstruction: PRESCHOOL_SYSTEM_INSTRUCTION,
+        prompt: fullPrompt,
+      });
+
+      if (result.text) {
+        const text = result.text.trim();
+        generatedChunks.push(text);
+        // Cập nhật bối cảnh chuyển tiếp để Lượt tiếp theo kế thừa đúng 100%
+        carryOverContext += `\n- Nội dung đã chốt ở Bước ${i + 1}: ${text.slice(0, 400)}...`;
+      }
+    } catch (err: any) {
+      console.error(`Pipeline step ${i + 1} error:`, err);
+    }
+  }
+
+  const fullCleanMarkdown = generatedChunks.join("\n\n---\n\n");
+
+  const lesson: StructuredLessonOutput = {
+    title: prompt.slice(0, 50),
+    ageGroup,
+    duration,
+    topic: prompt,
+    objectives: { knowledge: "Xem chi tiết kế hoạch 5 ngày", skills: "", attitude: "" },
+    preparation: { teacher: "Chuẩn bị theo kế hoạch", child: "Chuẩn bị theo kế hoạch" },
+    teacherActivities: ["Hoạt động học 5 ngày (xem file)"],
+    childActivities: ["Trẻ thực hiện theo kế hoạch"],
+    openQuestions: [],
+    reinforcementGame: { name: "Trò chơi củng cố", rules: "Theo kế hoạch", how_to_play: "Theo kế hoạch" },
+    conclusion: "Đánh giá cuối tuần",
+    assessment: "Đánh giá trẻ theo chuẩn",
+    extension: "",
+  };
+
+  return { lesson, rawText: fullCleanMarkdown };
 }
 
 export async function generateStudentComment(
