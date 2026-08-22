@@ -458,6 +458,7 @@ ${stepInstruction}
 
 QUY TẮC BẮT BUỘC:
 - KHÔNG chào hỏi, KHÔNG giới thiệu rườm rà (KHÔNG viết "Chào cô...", KHÔNG viết "Dưới đây là...").
+- KHÔNG sử dụng các thẻ HTML thô như <br>, <br/>, <p>, <span>. Dùng dấu xuống dòng văn bản hoặc gạch đầu dòng (-) chuẩn Markdown.
 - Trình bày Bảng biểu đúng định dạng Bảng Markdown chuẩn (| Cột 1 | Cột 2 | Cột 3 | Cột 4 |).
 `;
 

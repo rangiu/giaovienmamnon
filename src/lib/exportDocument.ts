@@ -9,7 +9,6 @@ import {
   TableRow,
   TableCell,
   WidthType,
-  HeadingLevel,
   AlignmentType,
 } from "docx";
 
@@ -35,17 +34,117 @@ function safeFileName(title: string) {
     .slice(0, 60);
 }
 
+/** Tẩy sạch các thẻ HTML thô (<br>, <p>, &nbsp;) thành ký tự xuống dòng / dấu cách sạch. */
+function cleanRawHtmlTags(raw: string): string {
+  if (!raw) return "";
+  return raw
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<p[^>]*>/gi, "")
+    .replace(/<div[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "") // Xóa mọi thẻ HTML còn lại
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"');
+}
+
+/** Tách chuỗi Markdown thành các TextRun có định dạng (In đậm, In nghiêng) chuẩn Microsoft Word. */
+function parseMarkdownTextRuns(
+  text: string,
+  isHeader: boolean = false,
+  fontSize: number = 24,
+  fontColor: string = "1E293B"
+): TextRun[] {
+  const runs: TextRun[] = [];
+  const clean = text.replace(/\*/g, (match, offset, fullStr) => {
+    // Giữ lại dấu * nếu không phải cú pháp markdown **bold**
+    return match;
+  });
+
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      runs.push(
+        new TextRun({
+          text: part.slice(2, -2),
+          bold: true,
+          size: fontSize,
+          font: "Times New Roman",
+          color: isHeader ? "065F46" : fontColor,
+        })
+      );
+    } else {
+      runs.push(
+        new TextRun({
+          text: part.replace(/\*\*/g, ""),
+          bold: isHeader,
+          size: fontSize,
+          font: "Times New Roman",
+          color: isHeader ? "065F46" : fontColor,
+        })
+      );
+    }
+  }
+
+  return runs.length > 0
+    ? runs
+    : [
+        new TextRun({
+          text: text.replace(/\*\*/g, ""),
+          bold: isHeader,
+          size: fontSize,
+          font: "Times New Roman",
+          color: isHeader ? "065F46" : fontColor,
+        }),
+      ];
+}
+
+/** Chuyển đổi nội dung ô Bảng (TableCell) thành danh sách các đoạn văn Paragraph chuẩn. */
+function buildCellParagraphs(cellRaw: string, isHeader: boolean): Paragraph[] {
+  const cleaned = cleanRawHtmlTags(cellRaw);
+  const lines = cleaned.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+
+  if (lines.length === 0) {
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "",
+            size: isHeader ? 22 : 20,
+            font: "Times New Roman",
+          }),
+        ],
+      }),
+    ];
+  }
+
+  return lines.map(
+    (line) =>
+      new Paragraph({
+        children: parseMarkdownTextRuns(line, isHeader, isHeader ? 22 : 20, isHeader ? "065F46" : "1E293B"),
+        spacing: { before: 40, after: 40 },
+      })
+  );
+}
+
 export function exportAsTxt(title: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const cleanContent = cleanRawHtmlTags(content);
+  const blob = new Blob([cleanContent], { type: "text/plain;charset=utf-8" });
   downloadBlob(blob, `${safeFileName(title)}.txt`);
 }
 
 /**
  * Xuất file .docx nhị phân thật mở bằng Microsoft Word chuẩn 100%,
- * tự động dựng Bảng (Tables) kẻ ô, Cột và Định dạng từ văn bản Markdown.
+ * tự động tẩy sạch các thẻ HTML thô (<br>, <p>), dựng Bảng kẻ ô, Cột và Định dạng.
  */
 export async function exportAsDocx(title: string, content: string) {
-  const lines = content.split("\n");
+  const cleanedContent = cleanRawHtmlTags(content);
+  const lines = cleanedContent.split("\n");
   const children: any[] = [];
 
   // Tiêu đề chính của tài liệu
@@ -78,30 +177,15 @@ export async function exportAsDocx(title: string, content: string) {
       const tableRows = validRows.map((rowCells, rowIndex) => {
         const isHeader = rowIndex === 0;
         return new TableRow({
-          children: rowCells.map(
-            (cellText) => {
-              const isBoldCell = isHeader || cellText.includes("**");
-              const cleanCellText = cellText.replace(/\*\*/g, "").replace(/<br\s*\/?>/gi, "\n").trim();
-              return new TableCell({
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: cleanCellText,
-                        bold: isBoldCell,
-                        size: isHeader ? 22 : 20, // 11pt hoặc 10pt
-                        font: "Times New Roman",
-                        color: isHeader ? "065F46" : "1E293B",
-                      }),
-                    ],
-                  }),
-                ],
-                shading: isHeader ? { fill: "ECFDF5" } : undefined, // Nền xanh ngọc nhẹ cho tiêu đề bảng
-                width: { size: Math.floor(100 / Math.max(rowCells.length, 1)), type: WidthType.PERCENTAGE },
-                margins: { top: 100, bottom: 100, left: 150, right: 150 },
-              });
-            }
-          ),
+          children: rowCells.map((cellText) => {
+            const cellParagraphs = buildCellParagraphs(cellText, isHeader);
+            return new TableCell({
+              children: cellParagraphs,
+              shading: isHeader ? { fill: "ECFDF5" } : undefined, // Nền xanh ngọc nhẹ cho tiêu đề bảng
+              width: { size: Math.floor(100 / Math.max(rowCells.length, 1)), type: WidthType.PERCENTAGE },
+              margins: { top: 100, bottom: 100, left: 150, right: 150 },
+            });
+          }),
         });
       });
 
@@ -142,7 +226,7 @@ export async function exportAsDocx(title: string, content: string) {
         new Paragraph({
           children: [
             new TextRun({
-              text: trimmed.replace(/^#\s+/, ""),
+              text: trimmed.replace(/^#\s+/, "").replace(/\*\*/g, ""),
               bold: true,
               size: 28, // 14pt
               font: "Times New Roman",
@@ -157,7 +241,7 @@ export async function exportAsDocx(title: string, content: string) {
         new Paragraph({
           children: [
             new TextRun({
-              text: trimmed.replace(/^##\s+/, ""),
+              text: trimmed.replace(/^##\s+/, "").replace(/\*\*/g, ""),
               bold: true,
               size: 26, // 13pt
               font: "Times New Roman",
@@ -172,7 +256,7 @@ export async function exportAsDocx(title: string, content: string) {
         new Paragraph({
           children: [
             new TextRun({
-              text: trimmed.replace(/^###\s+/, ""),
+              text: trimmed.replace(/^###\s+/, "").replace(/\*\*/g, ""),
               bold: true,
               size: 24, // 12pt
               font: "Times New Roman",
@@ -184,30 +268,7 @@ export async function exportAsDocx(title: string, content: string) {
       );
     } else {
       // Đoạn văn có xử lý chữ in đậm **text**
-      const runs: TextRun[] = [];
-      const parts = trimmed.split(/(\*\*.*?\*\*)/g);
-
-      for (const part of parts) {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          runs.push(
-            new TextRun({
-              text: part.slice(2, -2),
-              bold: true,
-              font: "Times New Roman",
-              size: 24, // 12pt
-            })
-          );
-        } else if (part) {
-          runs.push(
-            new TextRun({
-              text: part,
-              font: "Times New Roman",
-              size: 24, // 12pt
-            })
-          );
-        }
-      }
-
+      const runs = parseMarkdownTextRuns(trimmed, false, 24, "1E293B");
       children.push(
         new Paragraph({
           children: runs,
@@ -252,7 +313,8 @@ export async function exportAsPdf(title: string, content: string) {
   container.style.color = "#1e293b";
 
   const escapedTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  const escapedContent = content
+  const cleanedContent = cleanRawHtmlTags(content);
+  const escapedContent = cleanedContent
     .split("\n")
     .map((line) => `<p style="margin:0 0 10px 0; white-space:pre-wrap;">${line.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "&nbsp;"}</p>`)
     .join("");
