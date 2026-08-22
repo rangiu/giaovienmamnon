@@ -9,6 +9,11 @@
 // dưới (`teacherActivities`, `childActivities`, `openQuestions`,
 // `reinforcementGame`, `ageGroup`) — vì LessonCard đọc theo tên camelCase,
 // không tìm thấy field snake_case nên coi như rỗng.
+export interface CustomSectionItem {
+  heading: string;
+  content: string | string[] | any;
+}
+
 export interface StructuredLessonOutput {
   title: string;
   ageGroup: string;
@@ -34,6 +39,7 @@ export interface StructuredLessonOutput {
   conclusion?: string;
   assessment?: string;
   extension?: string;
+  customSections?: CustomSectionItem[];
 }
 
 /**
@@ -147,5 +153,11 @@ export function validateLessonOutput(data: any): StructuredLessonOutput | null {
     conclusion: data.conclusion || "Cô tổng kết và khen ngợi cả lớp.",
     assessment: data.assessment || "Đánh giá mức độ tham gia của trẻ.",
     extension: data.extension || "Hoạt động bổ trợ tại các góc chơi.",
+    customSections: Array.isArray(data.custom_sections || data.customSections)
+      ? (data.custom_sections || data.customSections).map((sec: any) => ({
+          heading: sec.heading || sec.title || "Mục giáo án",
+          content: sec.content || sec.details || sec.description || "",
+        }))
+      : undefined,
   };
 }

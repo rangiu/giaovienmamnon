@@ -135,6 +135,18 @@ Hãy đảm bảo điền đầy đủ và chi tiết nội dung tiết dạy ch
     }
   }
 
+  const customSectionsInstruction = templateGuidance
+    ? `
+  "custom_sections": [
+    // BẮT BUỘC liệt kê lại ĐÚNG VÀ ĐỦ TẤT CẢ tiêu đề các mục (heading) từ mẫu đã chọn ở trên.
+    // Ví dụ:
+    {
+      "heading": "Tên tiêu đề mục 1 từ mẫu",
+      "content": "Nội dung chi tiết cho mục 1..."
+    }
+  ],`
+    : "";
+
   const structuredPrompt = `
 Hãy soạn một giáo án mầm non hoàn chỉnh theo yêu cầu sau: "${prompt}".
 Độ tuổi mục tiêu: ${ageGroup}.
@@ -147,7 +159,7 @@ BẮT BUỘC trả về ĐÚNG ĐỊNH DẠNG JSON duy nhất sau (không thêm 
   "title": "Tên hoạt động ngắn gọn hấp dẫn",
   "age_group": "${ageGroup}",
   "duration": "${duration}",
-  "topic": "Chủ đề giáo án",
+  "topic": "Chủ đề giáo án",${customSectionsInstruction}
   "objectives": {
     "knowledge": "Kiến thức trẻ đạt được",
     "skills": "Kỹ năng rèn luyện cho trẻ",

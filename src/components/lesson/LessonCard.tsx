@@ -54,6 +54,7 @@ export function LessonCard({
   const childActs = parseField(currentLesson.childActivities, []);
   const openQs = parseField(currentLesson.openQuestions, []);
   const game = parseField(currentLesson.reinforcementGame, { name: "", rules: "", how_to_play: "" });
+  const customSections = parseField(currentLesson.customSections, null);
 
   const handleSaveToDb = async () => {
     if (isSaved && currentLesson.id) return;
@@ -180,7 +181,41 @@ ${currentLesson.assessment ? `\n6. ĐÁNH GIÁ:\n${currentLesson.assessment}\n` 
           </div>
         </div>
 
-        {/* Section I: Objectives */}
+        {/* Dynamic Custom Sections (Hiển thị đúng 100% các tiêu đề mục từ file Mẫu người dùng tải lên) */}
+        {Array.isArray(customSections) && customSections.length > 0 ? (
+          <div className="space-y-4">
+            {customSections.map((sec: any, idx: number) => (
+              <div
+                key={idx}
+                className="bg-gradient-to-r from-emerald-50/80 to-teal-50/50 p-4 rounded-2xl border border-emerald-100/70 space-y-2"
+              >
+                <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <h4>{sec.heading || `Mục ${idx + 1}`}</h4>
+                </div>
+                <div className="text-xs text-slate-700 leading-relaxed pl-6">
+                  {typeof sec.content === "string" ? (
+                    <p className="whitespace-pre-wrap">{sec.content}</p>
+                  ) : Array.isArray(sec.content) ? (
+                    <ul className="list-disc list-inside space-y-1">
+                      {sec.content.map((item: any, i: number) => (
+                        <li key={i} className="whitespace-pre-wrap">
+                          {typeof item === "object" ? JSON.stringify(item) : String(item)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans text-xs">
+                      {JSON.stringify(sec.content, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Section I: Objectives */}
         <div className="bg-gradient-to-r from-emerald-50/80 to-teal-50/50 p-4 rounded-2xl border border-emerald-100/70 space-y-2">
           <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -352,7 +387,6 @@ ${currentLesson.assessment ? `\n6. ĐÁNH GIÁ:\n${currentLesson.assessment}\n` 
           </div>
         )}
 
-        {/* Footer info & Extensions */}
         {(currentLesson.conclusion || currentLesson.extension) && (
           <div className="bg-slate-50 p-4 rounded-2xl text-xs space-y-1 text-slate-600 border border-slate-200/60">
             {currentLesson.conclusion && (
@@ -366,6 +400,8 @@ ${currentLesson.assessment ? `\n6. ĐÁNH GIÁ:\n${currentLesson.assessment}\n` 
               </p>
             )}
           </div>
+        )}
+          </>
         )}
       </div>
 

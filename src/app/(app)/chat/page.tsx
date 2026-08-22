@@ -23,6 +23,7 @@ import {
   X,
   MessageCircle,
   Trash2,
+  Paperclip,
 } from "lucide-react";
 import { LessonCard } from "@/components/lesson/LessonCard";
 import { SaveLessonBanner } from "@/components/lesson/SaveLessonBanner";
@@ -279,13 +280,60 @@ function ChatContent() {
     }
   }, [initialQuery]);
 
+  // File đính kèm & Paste (Ctrl+V) ở ô Chat
+  const [attachedFile, setAttachedFile] = useState<{ fileName: string; text: string } | null>(null);
+  const [parsingFile, setParsingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileProcess = async (file: File) => {
+    setParsingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/chat/parse-file", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success && data.text) {
+        setAttachedFile({ fileName: file.name, text: data.text });
+      } else {
+        alert(data.error || "Không thể đọc file đính kèm.");
+      }
+    } catch (err) {
+      console.error("Parse chat file error:", err);
+      alert("Lỗi khi đính kèm file.");
+    } finally {
+      setParsingFile(false);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0) {
+      e.preventDefault();
+      handleFileProcess(files[0]);
+    }
+  };
+
   const handleSendMessage = async (promptToSend?: string) => {
     const text = promptToSend || inputPrompt;
     if (!text.trim() || loading) return;
 
-    const userMessage: ChatMessage = { role: "user", content: text };
+    let fullPromptToSend = text;
+    if (attachedFile) {
+      fullPromptToSend = `${text}\n\n[TÀI LIỆU ĐÍNH KÈM TỪ FILE: "${attachedFile.fileName}"]:\n${attachedFile.text.slice(0, 10000)}`;
+    }
+
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: attachedFile ? `📄 [File: ${attachedFile.fileName}]\n${text}` : text,
+    };
     setMessages((prev) => [...prev, userMessage]);
     if (!promptToSend) setInputPrompt("");
+    setAttachedFile(null);
     setLoading(true);
     setErrorMsg(null);
 
@@ -294,7 +342,7 @@ function ChatContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: text,
+          prompt: fullPromptToSend,
           conversationId,
         }),
       });
@@ -693,7 +741,25 @@ function ChatContent() {
       </div>
 
       {/* Input Form */}
-      <div className="p-4 border-t border-emerald-100 bg-white">
+      <div className="p-4 border-t border-emerald-100 bg-white space-y-2">
+        {/* Attached File Badge */}
+        {attachedFile && (
+          <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-800">
+            <Paperclip className="w-3.5 h-3.5 text-emerald-600" />
+            <span>📄 {attachedFile.fileName}</span>
+            <span className="text-[10px] text-emerald-600 font-normal">
+              ({attachedFile.text.length} ký tự text)
+            </span>
+            <button
+              onClick={() => setAttachedFile(null)}
+              className="w-4 h-4 rounded-full bg-emerald-200 hover:bg-emerald-300 text-emerald-800 flex items-center justify-center font-bold text-[10px] ml-1"
+              title="Xóa file đính kèm"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -701,17 +767,45 @@ function ChatContent() {
           }}
           className="flex items-center gap-2"
         >
+          {/* Paperclip File Upload Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={parsingFile || loading}
+            title="Đính kèm file Word (.docx, .doc), PDF, TXT, MD hoặc Dán (Ctrl+V)"
+            className="p-3 rounded-2xl bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors shrink-0 disabled:opacity-50"
+          >
+            {parsingFile ? (
+              <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+            ) : (
+              <Paperclip className="w-5 h-5" />
+            )}
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".docx,.pdf,.txt,.md,.doc"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileProcess(file);
+              e.target.value = "";
+            }}
+          />
+
           <input
             type="text"
             value={inputPrompt}
             onChange={(e) => setInputPrompt(e.target.value)}
-            placeholder="Nói cho SUMFLOW biết cô cần gì (Ví dụ: 'Thêm một trò chơi vận động không đạo cụ')..."
+            onPaste={handlePaste}
+            placeholder="Nói cho SUMFLOW biết cô cần gì (Cô có thể dán file Ctrl+V hoặc bấm 📎 đính kèm)..."
             className="flex-1 px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium text-slate-800 placeholder-slate-400 bg-slate-50/50 focus:bg-white"
           />
 
           <button
             type="submit"
-            disabled={loading || !inputPrompt.trim()}
+            disabled={loading || parsingFile || (!inputPrompt.trim() && !attachedFile)}
             className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-5 py-3 rounded-2xl transition-colors shadow-md flex items-center gap-2 shrink-0"
           >
             {loading ? (
