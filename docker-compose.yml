@@ -12,16 +12,16 @@
 services:
   migrate:
     profiles: ["prod"]
-    image: coai-migrate:latest
-    build:
-      context: .
-      target: builder
+    image: coai-app:latest
     container_name: coai-migrate
     command: npx prisma db push --accept-data-loss
     environment:
       DATABASE_URL: ${DATABASE_URL:?Phải đặt DATABASE_URL trong file .env}
     networks:
       - sumflow_default
+    depends_on:
+      app:
+        condition: service_started
 
   app:
     profiles: ["prod"]
@@ -71,9 +71,6 @@ services:
       - "127.0.0.1:3001:3000"
     volumes:
       - coai_media:/app/storage/videos
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     networks:
       - sumflow_default
 
