@@ -63,8 +63,18 @@ export async function chatWithCoAi(
       content: m.content,
     }));
 
+    let finalSystemInstruction = PRESCHOOL_SYSTEM_INSTRUCTION;
+    const isPlanOrLessonRequest = /soạn|giáo án|kế hoạch|chủ đề|theo mẫu/i.test(userPrompt);
+    if (isPlanOrLessonRequest) {
+      finalSystemInstruction += `\n\nQUY TẮC BẮT BUỘC CHO YÊU CẦU NÀY:
+1. KHÔNG chào hỏi, KHÔNG giới thiệu rườm rà (KHÔNG viết "Chào cô...", KHÔNG viết "Em rất vui...", KHÔNG viết "Dựa trên yêu cầu...").
+2. VÀO THẲNG NỘI DUNG BẮT ĐẦU TỪ TIÊU ĐỀ (# KẾ HOẠCH TUẦN...).
+3. BẮT BUỘC trình bày Bảng phân công các góc và Bảng kế hoạch 5 ngày học (Thứ 2 đến Thứ 6) dạng Bảng Markdown chuẩn (| Cột 1 | Cột 2 | Cột 3 | Cột 4 |).
+4. BẮT BUỘC viết đầy đủ trọn vẹn cả 5 ngày (Thứ 2, Thứ 3, Thứ 4, Thứ 5, Thứ 6) trong phản hồi duy nhất này. KHÔNG ngắt giữa chừng!`;
+    }
+
     const result = await runAiText(tier, {
-      systemInstruction: PRESCHOOL_SYSTEM_INSTRUCTION,
+      systemInstruction: finalSystemInstruction,
       history,
       prompt: fullPrompt,
     });
@@ -219,12 +229,73 @@ BẮT BUỘC trả về ĐÚNG ĐỊNH DẠNG JSON duy nhất sau (không thêm 
     }
 
     const lesson = validateLessonOutput(result.parsed);
+    if (!lesson) {
+      return { lesson: null, rawText: result.rawText, error: "AI_RESPONSE_INVALID_JSON" };
+    }
+
     console.log(
       `[generateLessonPlan] OK sau ${result.attempts} lần thử (model: ${result.modelUsed}). ` +
-        `teacherActivities=${lesson?.teacherActivities.length} childActivities=${lesson?.childActivities.length} openQuestions=${lesson?.openQuestions.length}`
+        `teacherActivities=${lesson.teacherActivities.length} childActivities=${lesson.childActivities.length} openQuestions=${lesson.openQuestions.length}`
     );
 
-    return { lesson, rawText: result.rawText };
+    // Chuyển đổi đối tượng lesson thành văn bản Markdown sạch 100% (có Bảng/Tables, Tiêu đề),
+    // KHÔNG bao giờ trả về chuỗi JSON thô làm cô giáo thấy chuỗi mã code.
+    let cleanMarkdown = `# GIÁO ÁN: ${lesson.title.toUpperCase()}\n\n`;
+    cleanMarkdown += `**Độ tuổi:** ${lesson.ageGroup || ageGroup} | **Thời lượng:** ${lesson.duration || duration}\n\n`;
+
+    if (lesson.customSections && lesson.customSections.length > 0) {
+      for (const sec of lesson.customSections) {
+        cleanMarkdown += `### ${sec.heading}\n${sec.content}\n\n`;
+      }
+    } else {
+      cleanMarkdown += `## I. MỤC TIÊU BÀI HỌC\n`;
+      if (typeof lesson.objectives === "object" && !Array.isArray(lesson.objectives)) {
+        cleanMarkdown += `- **Kiến thức:** ${lesson.objectives.knowledge || ""}\n`;
+        cleanMarkdown += `- **Kỹ năng:** ${lesson.objectives.skills || ""}\n`;
+        cleanMarkdown += `- **Thái độ:** ${lesson.objectives.attitude || ""}\n\n`;
+      } else if (Array.isArray(lesson.objectives)) {
+        cleanMarkdown += lesson.objectives.map((o) => `- ${o}`).join("\n") + "\n\n";
+      }
+
+      cleanMarkdown += `## II. CHUẨN BỊ\n`;
+      if (typeof lesson.preparation === "object" && !Array.isArray(lesson.preparation)) {
+        cleanMarkdown += `- **Cô:** ${lesson.preparation.teacher || ""}\n`;
+        cleanMarkdown += `- **Trẻ:** ${lesson.preparation.child || ""}\n\n`;
+      } else if (Array.isArray(lesson.preparation)) {
+        cleanMarkdown += lesson.preparation.map((p) => `- ${p}`).join("\n") + "\n\n";
+      }
+
+      cleanMarkdown += `## III. CÁC HOẠT ĐỘNG DẠY HỌC CHÍNH\n`;
+      if (Array.isArray(lesson.teacherActivities)) {
+        lesson.teacherActivities.forEach((act, i) => {
+          cleanMarkdown += `### ${act}\n`;
+          if (lesson.childActivities && lesson.childActivities[i]) {
+            cleanMarkdown += `- **Hoạt động của trẻ:** ${lesson.childActivities[i]}\n`;
+          }
+        });
+        cleanMarkdown += `\n`;
+      }
+
+      if (lesson.openQuestions && lesson.openQuestions.length > 0) {
+        cleanMarkdown += `## IV. CÂU HỎI GỢI MỞ THẢO LUẬN\n`;
+        lesson.openQuestions.forEach((q) => {
+          cleanMarkdown += `- ${q}\n`;
+        });
+        cleanMarkdown += `\n`;
+      }
+
+      if (lesson.reinforcementGame && typeof lesson.reinforcementGame === "object") {
+        cleanMarkdown += `## V. TRÒ CHƠI CỦNG CỐ: ${lesson.reinforcementGame.name ? lesson.reinforcementGame.name.toUpperCase() : ""}\n`;
+        cleanMarkdown += `- **Luật chơi:** ${lesson.reinforcementGame.rules || ""}\n`;
+        cleanMarkdown += `- **Cách chơi:** ${lesson.reinforcementGame.how_to_play || ""}\n\n`;
+      }
+
+      if (lesson.conclusion) cleanMarkdown += `**Kết thúc:** ${lesson.conclusion}\n\n`;
+      if (lesson.assessment) cleanMarkdown += `**Đánh giá:** ${lesson.assessment}\n\n`;
+      if (lesson.extension) cleanMarkdown += `**Mở rộng:** ${lesson.extension}\n\n`;
+    }
+
+    return { lesson, rawText: cleanMarkdown };
   } catch (err: any) {
     console.error("Failed to generate lesson:", err);
     return {
