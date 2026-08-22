@@ -89,6 +89,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@remotion ./node_mod
 # cache này sang, KHÔNG cần chạy lại CLI ở runner (thiếu node_modules đầy
 # đủ nên chạy CLI ở đây sẽ lỗi MODULE_NOT_FOUND).
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.remotion ./node_modules/.remotion
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/mammoth ./node_modules/mammoth
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdf-parse ./node_modules/pdf-parse
 RUN chown -R nextjs:nodejs /app
 
 USER nextjs

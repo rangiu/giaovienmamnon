@@ -85,6 +85,9 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     console.error("POST /api/lessons/templates/upload error:", error);
-    return NextResponse.json({ success: false, error: "Không thể xử lý và lưu file mẫu." }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: `Lỗi khi xử lý file: ${error?.message || "Không thể xử lý và lưu file mẫu."}` },
+      { status: 400 }
+    );
   }
 }
