@@ -1,4 +1,18 @@
 import mammoth from "mammoth";
+
+// Polyfill browser globals required by pdfjs-dist inside pdf-parse under Node.js
+if (typeof globalThis.DOMMatrix === "undefined") {
+  (globalThis as any).DOMMatrix = class DOMMatrix {
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+  };
+}
+if (typeof globalThis.ImageData === "undefined") {
+  (globalThis as any).ImageData = class ImageData {};
+}
+if (typeof globalThis.Path2D === "undefined") {
+  (globalThis as any).Path2D = class Path2D {};
+}
+
 // pdf-parse uses CommonJS require in Node
 const pdfParse = require("pdf-parse");
 
