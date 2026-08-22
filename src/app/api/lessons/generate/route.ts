@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireFullAccess } from "@/lib/auth";
-import { generateLessonPlan } from "@/lib/ai/aiEngine";
+import { generateLessonPlan, generateLessonPlanStep } from "@/lib/ai/aiEngine";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { prompt, ageGroup = "4–5 tuổi", duration = "30 phút", templateId } = body;
+    const { prompt, ageGroup = "4–5 tuổi", duration = "30 phút", templateId, step, carryOverContext } = body;
 
     if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
       return NextResponse.json(
@@ -35,6 +35,28 @@ export async function POST(request: Request) {
     }
 
     const aiTier = access.tier === "FULL" ? "FULL" : "LIMITED";
+
+    // Nếu FE gọi theo từng bước (step 1, step 2) để ngừa HTTP 524 Timeout (~20s mỗi bước):
+    if (step) {
+      const stepResult = await generateLessonPlanStep(
+        prompt,
+        ageGroup,
+        Number(step),
+        carryOverContext || "",
+        { teacher },
+        user.id,
+        aiTier,
+        customStructure
+      );
+
+      return NextResponse.json({
+        success: true,
+        step: Number(step),
+        text: stepResult.text,
+        error: stepResult.error,
+      });
+    }
+
     const result = await generateLessonPlan(
       prompt,
       ageGroup,

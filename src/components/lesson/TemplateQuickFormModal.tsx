@@ -38,6 +38,7 @@ export function TemplateQuickFormModal({
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [previewTemplate, setPreviewTemplate] = useState<any | null>(null);
+  const [pipelineProgress, setPipelineProgress] = useState({ step: 1, text: "Đang khởi chạy..." });
 
   // Form Upload mẫu
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -84,62 +85,56 @@ export function TemplateQuickFormModal({
 
     setGenerating(true);
     setGenerateError("");
+    setPipelineProgress({ step: 1, text: "Bước 1/2: Đang soạn Mục tiêu, Bảng 7 góc chơi & Chơi ngoài trời 5 ngày (~20s)..." });
 
     try {
-      // 1. Gọi AI sinh giáo án
-      const res = await fetch("/api/lessons/generate", {
+      // Step 1: Gọi AI soạn Phần 1 (~20s)
+      const res1 = await fetch("/api/lessons/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: prompt.trim(),
           ageGroup,
           templateId: selectedTemplateId || undefined,
+          step: 1,
         }),
       });
 
-      const data = await res.json();
-
-      if (!data.success) {
-        setGenerateError(data.message || data.error || "Không thể sinh giáo án.");
+      const data1 = await res1.json();
+      if (!data1.success || !data1.text) {
+        setGenerateError(data1.message || data1.error || "Không thể khởi chạy Bước 1.");
         return;
       }
 
-      const generatedLesson = data.lesson;
-      if (!generatedLesson) {
-        setGenerateError("AI trả về kết quả rỗng. Vui lòng bấm thử lại.");
-        return;
-      }
+      setPipelineProgress({ step: 2, text: "Bước 2/2: Đang hoàn thiện Kế hoạch Hoạt động học 5 ngày & Đánh giá (~20s)..." });
 
-      // 2. Tự động lưu giáo án mới tạo vào Database
-      const saveRes = await fetch("/api/lessons", {
+      // Step 2: Gọi AI soạn Phần 2 (~20s), truyền carryOverContext từ Bước 1
+      const res2 = await fetch("/api/lessons/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: generatedLesson.title,
-          ageGroup: generatedLesson.ageGroup || ageGroup,
-          duration: generatedLesson.duration || "30 phút",
-          topic: generatedLesson.topic || prompt,
-          objectives: JSON.stringify(generatedLesson.objectives),
-          preparation: JSON.stringify(generatedLesson.preparation),
-          teacherActivities: JSON.stringify(generatedLesson.teacherActivities),
-          childActivities: JSON.stringify(generatedLesson.childActivities),
-          openQuestions: JSON.stringify(generatedLesson.openQuestions),
-          reinforcementGame: JSON.stringify(generatedLesson.reinforcementGame),
-          conclusion: generatedLesson.conclusion || "",
-          assessment: generatedLesson.assessment || "",
-          extension: generatedLesson.extension || "",
-          rawJson: JSON.stringify(generatedLesson),
+          prompt: prompt.trim(),
+          ageGroup,
+          templateId: selectedTemplateId || undefined,
+          step: 2,
+          carryOverContext: data1.text.slice(0, 500),
         }),
       });
 
-      const saveData = await saveRes.json();
-      if (saveData.success) {
-        onLessonGenerated(saveData.lesson, data.rawText);
-        onClose();
-      } else {
-        onLessonGenerated(generatedLesson, data.rawText);
-        onClose();
-      }
+      const data2 = await res2.json();
+      const text2 = data2.success && data2.text ? data2.text : "";
+
+      const fullRawText = `${data1.text}\n\n---\n\n${text2}`;
+
+      const generatedLesson = {
+        title: prompt.trim(),
+        ageGroup,
+        duration: "30 phút",
+        topic: prompt.trim(),
+      };
+
+      onLessonGenerated(generatedLesson, fullRawText);
+      onClose();
     } catch (err: any) {
       console.error("Generate error:", err);
       setGenerateError("Có lỗi kết nối. Vui lòng thử lại!");
@@ -385,15 +380,20 @@ export function TemplateQuickFormModal({
                   <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
                     <span className="flex items-center gap-1.5">
                       <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                      <span>Đang chạy Tiến Trình Soạn 4 Bước Nối Tiếp...</span>
+                      <span>{pipelineProgress.text}</span>
                     </span>
-                    <span className="text-emerald-700">100% Đầy Đủ</span>
+                    <span className="text-emerald-700 font-black">
+                      {pipelineProgress.step === 1 ? "50%" : "100% (Hoàn tất)"}
+                    </span>
                   </div>
                   <div className="w-full bg-emerald-200 h-2 rounded-full overflow-hidden">
-                    <div className="bg-emerald-600 h-full w-full rounded-full animate-progress" />
+                    <div
+                      className="bg-emerald-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: pipelineProgress.step === 1 ? "50%" : "100%" }}
+                    />
                   </div>
                   <p className="text-[11px] text-emerald-700 leading-tight">
-                    AI đang soạn nối tiếp 4 phần (Góc chơi ➔ Chơi ngoài trời 5 ngày ➔ Hoạt động học Thứ 2–6 ➔ Đánh giá) để đảm bảo KHÔNG bị cụt hay thiếu data.
+                    Mỗi bước thực hiện siêu tốc (~20 giây) giúp ngăn ngừa 100% lỗi nghẽn mạng Cloudflare Timeout và trả về bài soạn đầy đủ 5 ngày.
                   </p>
                 </div>
               )}

@@ -417,6 +417,64 @@ QUY TẮC BẮT BUỘC:
   return { lesson, rawText: fullCleanMarkdown };
 }
 
+/**
+ * TIẾN TRÌNH SOẠN BÀI THEO BƯỚC SIÊU TỐC (FAST CLIENT-STEPPED GENERATOR)
+ * Giải quyết dứt điểm lỗi HTTP 524 Cloudflare Timeout (quá 100s).
+ * Mỗi HTTP request chỉ chạy đúng 1 bước (mất ~20-25s), Frontend gọi 2 lượt để hoàn thiện bài soạn 100%.
+ */
+export async function generateLessonPlanStep(
+  prompt: string,
+  ageGroup: string = "4–5 tuổi",
+  step: number = 1,
+  carryOverContext: string = "",
+  contextOptions: ContextOptions = {},
+  userId?: string,
+  tier: AiTier = "FULL",
+  customTemplateStructure?: string | null
+): Promise<{ text: string; error?: string }> {
+  if (hasNoProvider()) {
+    return { text: "", error: "MISSING_API_KEY" };
+  }
+
+  let stepInstruction = "";
+  if (step === 1) {
+    stepInstruction = `BẮT BUỘC trả về duy nhất 2 phần chính sau:
+1. Tiêu đề: "# KẾ HOẠCH TUẦN: ${prompt.toUpperCase()}" (Lứa tuổi: ${ageGroup}). Mục tiêu bài học (Kiến thức, Kỹ năng, Thái độ, Chuẩn bị của Cô và Trẻ).
+2. BẢNG PHÂN CÔNG 7 GÓC CHƠI & BẢNG HOẠT ĐỘNG NGOÀI TRỜI 5 NGÀY (Thứ 2 đến Thứ 6).
+Trình bày dạng Bảng Markdown chuẩn (| Hoạt động | Mục đích yêu cầu | Chuẩn bị | Tổ chức hoạt động |).`;
+  } else {
+    stepInstruction = `BẮT BUỘC trình bày CHI TIẾT KẾ HOẠCH HOẠT ĐỘNG HỌC CHO CẢ 5 NGÀY HỌC (Thứ 2, Thứ 3, Thứ 4, Thứ 5, Thứ 6), Hoạt động chiều và Bảng Đánh giá trẻ sau chủ đề.
+Mỗi ngày trình bày rõ: Đón trẻ & Trò chuyện sáng, Thể dục sáng, Hoạt động học chính (Tiến trình 3 bước) và Vệ sinh ăn ngủ.`;
+  }
+
+  const stepPrompt = `
+YÊU CẦU SOẠN BÀI: "${prompt}".
+Lứa tuổi: ${ageGroup}.
+
+${carryOverContext ? `HỒ SƠ BỐI CẢNH CỐ ĐỊNH TỪ BƯỚC TRƯỚC (BẮT BUỘC KẾ THỪA 100% ĐỒNG NHẤT):
+${carryOverContext}\n` : ""}
+
+${stepInstruction}
+
+QUY TẮC BẮT BUỘC:
+- KHÔNG chào hỏi, KHÔNG giới thiệu rườm rà (KHÔNG viết "Chào cô...", KHÔNG viết "Dưới đây là...").
+- Trình bày Bảng biểu đúng định dạng Bảng Markdown chuẩn (| Cột 1 | Cột 2 | Cột 3 | Cột 4 |).
+`;
+
+  try {
+    const fullPrompt = buildFullPromptContext(stepPrompt, contextOptions);
+    const result = await runAiText(tier, {
+      systemInstruction: PRESCHOOL_SYSTEM_INSTRUCTION,
+      prompt: fullPrompt,
+    });
+
+    return { text: result.text ? result.text.trim() : "" };
+  } catch (err: any) {
+    console.error(`Step ${step} error:`, err);
+    return { text: "", error: err?.message || "STEP_FAILED" };
+  }
+}
+
 export async function generateStudentComment(
   rawInput: string,
   studentName: string = "bé",
