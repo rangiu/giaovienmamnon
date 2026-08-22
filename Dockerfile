@@ -19,44 +19,20 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/placeholder"
 RUN npm run build
 
-# Tải sẵn Chrome Headless Shell cho Remotion NGAY Ở STAGE NÀY (không phải
-# stage runner) — builder có ĐẦY ĐỦ node_modules (npm ci đầy đủ, kể cả
-# @remotion/cli), còn runner chỉ có node_modules RÚT GỌN theo Next.js
-# "output: standalone" tracing + vài gói copy tay — thử chạy lệnh CLI ở
-# runner bị lỗi thật "MODULE_NOT_FOUND" vì thiếu nhiều gói phụ trợ của
-# @remotion/cli không nằm trong diện được copy tay. Trình duyệt tải về nằm
-# ở node_modules/.remotion/ (đã xác nhận qua test local), KHÔNG phụ thuộc
-# HOME — chỉ cần copy đúng thư mục này sang runner là đủ, không cần chạy
-# lại CLI ở đó nữa.
-RUN npx remotion browser ensure
-
 # ===== Giai đoạn 3: chạy production (ảnh tối giản) =====
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-# openssl: Prisma engine. ffmpeg: ghép clip Tier Veo (concat). Còn lại: thư
-# viện hệ thống Chrome Headless Shell cần để Remotion render Tier Hybrid —
-# danh sách đúng theo hướng dẫn chính thức remotion.dev/docs/docker, KHÔNG
-# ghim version (tránh gãy khi Debian cập nhật repo).
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV REMOTION_PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# openssl: Prisma engine. ffmpeg: ghép clip. chromium: Remotion video rendering.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
       openssl \
       ffmpeg \
-      libnss3 \
-      libdbus-1-3 \
-      libatk1.0-0 \
-      libgbm-dev \
-      libasound2 \
-      libxrandr2 \
-      libxkbcommon-dev \
-      libxfixes3 \
-      libxcomposite1 \
-      libxdamage1 \
-      libatk-bridge2.0-0 \
-      libpango-1.0-0 \
-      libcairo2 \
-      libcups2 \
+      chromium \
       fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 # Bug thật đã gặp: image này TRƯỚC ĐÓ không cài font nào cả — Chromium
@@ -84,11 +60,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/remotion ./remotion
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/remotion ./node_modules/remotion
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@remotion ./node_modules/@remotion
-# Chrome Headless Shell đã tải sẵn ở stage builder (xem giải thích ở
-# RUN npx remotion browser ensure phía trên) — chỉ cần copy nguyên thư mục
-# cache này sang, KHÔNG cần chạy lại CLI ở runner (thiếu node_modules đầy
-# đủ nên chạy CLI ở đây sẽ lỗi MODULE_NOT_FOUND).
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.remotion ./node_modules/.remotion
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/mammoth ./node_modules/mammoth
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdf-parse ./node_modules/pdf-parse
 RUN chown -R nextjs:nodejs /app
