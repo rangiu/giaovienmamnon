@@ -438,13 +438,40 @@ export async function generateLessonPlanStep(
 
   let stepInstruction = "";
   if (step === 1) {
-    stepInstruction = `BẮT BUỘC trả về duy nhất 2 phần chính sau:
-1. Tiêu đề: "# KẾ HOẠCH TUẦN: ${prompt.toUpperCase()}" (Lứa tuổi: ${ageGroup}). Mục tiêu bài học (Kiến thức, Kỹ năng, Thái độ, Chuẩn bị của Cô và Trẻ).
-2. BẢNG PHÂN CÔNG 7 GÓC CHƠI & BẢNG HOẠT ĐỘNG NGOÀI TRỜI 5 NGÀY (Thứ 2 đến Thứ 6).
-Trình bày dạng Bảng Markdown chuẩn (| Hoạt động | Mục đích yêu cầu | Chuẩn bị | Tổ chức hoạt động |).`;
+    stepInstruction = `BẮT BUỘC trả về duy nhất các phần cấu trúc sau (ĐÚNG 100% THEO FILE MẪU CHUẨN MẦM NON):
+
+# KẾ HOẠCH TUẦN: ${prompt.toUpperCase()}
+Lứa tuổi: ${ageGroup}
+
+## I. ĐÓN TRẺ, THỂ DỤC SÁNG
+- Đón trẻ & Trò chuyện sáng (Nội dung đón trẻ, rèn nếp chào hỏi).
+- Thể dục sáng (Động tác hô hấp, tay, lưng/bụng, chân, bật).
+
+## II. CHƠI, HOẠT ĐỘNG Ở CÁC GÓC
+BẢNG 4 CỘT CHUẨN: (| Hoạt động | Mục đích yêu cầu | Chuẩn bị | Tổ chức hoạt động |)
+Bắt buộc có đủ 7 góc: Góc xây dựng, Góc phân vai, Góc học tập, Góc thư viện, Góc nghệ thuật, Góc vận động, Góc thiên nhiên.
+
+## III. CHƠI NGOÀI TRỜI
+BẢNG HOẠT ĐỘNG NGOÀI TRỜI 5 NGÀY (Thứ 2 đến Thứ 6) với 5 cột: (| Thứ | Hoạt động quan sát / TCVĐ / CTYT | Mục đích yêu cầu | Chuẩn bị | Tổ chức hoạt động |).
+Mỗi ngày trình bày rõ: Hoạt động quan sát có chủ định, Trò chơi vận động (TCVĐ), Chơi theo ý thích (CTYT).`;
   } else {
-    stepInstruction = `BẮT BUỘC trình bày CHI TIẾT KẾ HOẠCH HOẠT ĐỘNG HỌC CHO CẢ 5 NGÀY HỌC (Thứ 2, Thứ 3, Thứ 4, Thứ 5, Thứ 6), Hoạt động chiều và Bảng Đánh giá trẻ sau chủ đề.
-Mỗi ngày trình bày rõ: Đón trẻ & Trò chuyện sáng, Thể dục sáng, Hoạt động học chính (Tiến trình 3 bước) và Vệ sinh ăn ngủ.`;
+    stepInstruction = `BẮT BUỘC trình bày CHI TIẾT "VI. KẾ HOẠCH HOẠT ĐỘNG THEO NGÀY" ĐẦY ĐỦ CẢ 5 NGÀY HỌC (Thứ 2, Thứ 3, Thứ 4, Thứ 5, Thứ 6) & BẢNG KÝ DUYỆT CUỐI BÀI:
+
+Đối với MỖI NGÀY HỌC (từ Thứ 2 đến Thứ 6), BẮT BUỘC phải trình bày đủ 3 phần cấu trúc nhỏ:
+1. **Hoạt động học chính**:
+   - Tên hoạt động học & Lĩnh vực (Phát triển nhận thức / Phát triển ngôn ngữ / Phát triển thể chất / Tạo hình / Toán).
+   - * Mục đích yêu cầu (* Kiến thức, * Kỹ năng, * Thái độ).
+   - * Chuẩn bị (* Đối với giáo viên, * Đối với trẻ, * Địa điểm tổ chức).
+   - * Cách tiến hành (Hoạt động 1: Ổn định gây hứng thú -> Hoạt động 2: Nội dung chính -> Hoạt động 3: Luyện tập củng cố -> Kết thúc).
+2. **Hoạt động chiều**:
+   - Tên hoạt động chiều (Ví dụ: Cho trẻ xem video an toàn, Hướng dẫn rửa mặt, Nhặt rác sân trường, Văn nghệ cuối tuần).
+   - Mục đích yêu cầu, Chuẩn bị, Cách tiến hành (Hoạt động 1, 2, 3, Kết thúc).
+3. **Nhận xét cuối ngày** (Tình trạng sức khỏe, ăn uống, vệ sinh, hoạt động của trẻ trong ngày).
+
+BẢNG KÝ DUYỆT CUỐI BÀI KẾ HOẠCH TUẦN:
+| GIÁO VIÊN THỰC HIỆN | TỔ CHUYÊN MÔN | PHÓ HIỆU TRƯỜNG |
+|:---:|:---:|:---:|
+| (Ký và ghi rõ họ tên) | (Ký và ghi rõ họ tên) | (Ký và ghi rõ họ tên) |`;
   }
 
   const stepPrompt = `
